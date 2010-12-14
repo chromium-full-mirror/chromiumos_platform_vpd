@@ -12,7 +12,7 @@ binary: libs
 				cc $(CFLAGS) -o vpd.o -c vpd.c
 				cc $(CFLAGS) -o vpd vpd.o lib/lib_vpd.o lib/lib_smbios.o lib/math.o -luuid
 
-test: lib
+test: libs
 				cc $(CFLAGS) -o lib/lib_vpd_test.o -c lib/lib_vpd_test.c
 				cc $(CFLAGS) -o vpd_test lib/lib_vpd.o lib/lib_vpd_test.o
 				./vpd_test
