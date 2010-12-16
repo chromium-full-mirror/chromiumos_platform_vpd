@@ -131,7 +131,7 @@ error_1:
 /*  Given a key=value string, this function parses it and adds to arugument
  *  pair container.
  */
-int parse_string(const uint8_t *string) {
+int parseString(const uint8_t *string) {
   char *key;
   char *value;
   int retval = VPD_OK;
@@ -147,6 +147,94 @@ int parse_string(const uint8_t *string) {
 
 error:
   free(key);
+  return retval;
+}
+
+
+int loadFile(const char *filename, struct PairContainer *container) {
+  FILE *fp;
+  int file_size;
+  char *read_buf;
+  struct vpd_entry *eps;
+  int index;
+  int retval = 0;
+
+  if (!(fp = fopen(filename, "r"))) {
+    fprintf(stderr, "* File [%s] cannot be opened for read. Ignored.\n",
+            filename);
+    return 0;
+  }
+  /* get file size */
+  fseek(fp, 0, SEEK_END);
+  file_size = ftell(fp);
+
+  /* read file content */
+  fseek(fp, 0, SEEK_SET);
+  read_buf = malloc(file_size);
+  assert(read_buf);
+  if (file_size != fread(read_buf, 1, file_size, fp)) {
+    printf("Reading file [%s] failed.\n", filename);
+    retval = 1;
+    goto teardown;
+  }
+  eps = (struct vpd_entry *)read_buf;
+  fclose(fp);
+
+  /* iterate all pairs */
+  for (index = eps->table_address;  /* skip the EPS */
+       read_buf[index] != VPD_TYPE_TERMINATOR &&
+       read_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+    if (VPD_OK != decodeVpdString(file_size, read_buf, container, &index)) {
+      retval = 1;
+      goto teardown;
+    }
+  }
+
+teardown:
+    free(read_buf);
+  return retval;
+}
+
+
+int saveFile(const struct PairContainer *container, const char *filename) {
+  FILE *fp;
+  unsigned char eps[1024];
+  int eps_len = 0;
+  int retval = 0;
+
+  /* encode into buffer */
+  if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
+    printf("encodeContainer() error.\n");
+    retval = 1;
+    goto teardown;
+  }
+  if (VPD_OK != encodeVpdTerminator(max_buf_len, buf, &buf_len)) {
+    printf("Out of space for terminator.\n");
+    retval = 1;
+    goto teardown;
+  }
+
+  if (VPD_OK != buildEpsAndTables(GOOGLE_VPD_2_0_OFFSET, buf_len,
+                                  sizeof(eps), eps, &eps_len)) {
+    printf("Cannot build EPS.\n");
+    retval = 1;
+    goto teardown;
+  }
+  assert(eps_len <= GOOGLE_VPD_2_0_OFFSET);
+  eps_len = GOOGLE_VPD_2_0_OFFSET;
+
+  /* write into file */
+  if (!(fp = fopen(filename, "w"))) {
+    printf("File [%s] cannot be opened for write.\n", filename);
+    retval = 1;
+    goto teardown;
+  } else {
+    fwrite(eps, eps_len, 1, fp);
+    fwrite(buf, buf_len, 1, fp);
+    fclose(fp);
+  }
+
+teardown:
   return retval;
 }
 
@@ -173,9 +261,6 @@ int main(int argc, char *argv[]) {
     {"pad", 0, 0, 'p'},
   };
   char *filename = NULL;
-  FILE *fp;
-  unsigned char eps[1024];
-  int eps_len = 0;
 
   initContainer(&file);
   initContainer(&argument);
@@ -192,7 +277,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 's':
-        if (VPD_OK != parse_string(optarg)) {
+        if (VPD_OK != parseString(optarg)) {
           printf("The string [%s] cannot be parsed.\n\n", optarg);
           retval = 1;
           goto teardown;
@@ -227,38 +312,14 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  /* FIXME: file is empty now. Will support decode later */
+  if (retval = loadFile(filename, &file)) {
+    goto teardown;
+  }
+
   mergeContainer(&file, &argument);
 
-  /* encode into buffer */
-  if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
-    retval = 1;
+  if (retval = saveFile(&file, filename)) {
     goto teardown;
-  }
-  if (VPD_OK != encodeVpdTerminator(max_buf_len, buf, &buf_len)) {
-    printf("Out of space for terminator.\n");
-    retval = 1;
-    goto teardown;
-  }
-
-  if (VPD_OK != buildEpsAndTables(GOOGLE_VPD_2_0_OFFSET, buf_len,
-                                  sizeof(eps), eps, &eps_len)) {
-    printf("Cannot build EPS.\n");
-    retval = 1;
-    goto teardown;
-  }
-  assert(eps_len <= GOOGLE_VPD_2_0_OFFSET);
-  eps_len = GOOGLE_VPD_2_0_OFFSET;
-
-  /* write into file */
-  if (!(fp = fopen(filename, "w"))) {
-    printf("File [%s] cannot be opened for write.\n", filename);
-    retval = 1;
-    goto teardown;
-  } else {
-    fwrite(eps, eps_len, 1, fp);
-    fwrite(buf, buf_len, 1, fp);
-    fclose(fp);
   }
 
 teardown:

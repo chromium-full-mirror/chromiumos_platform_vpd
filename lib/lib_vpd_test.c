@@ -70,6 +70,69 @@ int testEncodeLen() {
   return TEST_OK;
 }
 
+
+int testDecodeLen() {
+  int32_t length;
+  int32_t consumed;
+
+  { /* max_len is 0. No more char in string. */
+    uint8_t encoded[] = { 0x00 };
+    assert(VPD_FAIL == decodeLen(0, encoded, &length, &consumed));
+  }
+  { /* just decode one byte */
+    uint8_t encoded[] = { 0x00 };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == sizeof(encoded));
+    assert(length == 0);
+  }
+  { /* just decode one byte */
+    uint8_t encoded[] = { 0x7F };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == sizeof(encoded));
+    assert(length == 0x7F);
+  }
+  { /* more bit is set, but reachs end of string. */
+    uint8_t encoded[] = { 0x80 };
+    assert(VPD_FAIL == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+  }
+  { /* decode 2 bytes, but reachs end of string. */
+    uint8_t encoded[] = { 0x81, 0x02 };
+    assert(VPD_FAIL == decodeLen(1, encoded, &length, &consumed));
+  }
+  { /* more bit is set, but reachs end of string. */
+    uint8_t encoded[] = { 0x81, 0x82 };
+    assert(VPD_FAIL == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+  }
+  { /* decode 2 bytes, normal case */
+    uint8_t encoded[] = { 0x81, 0x02 };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == sizeof(encoded));
+    assert(length == 0x82);
+  }
+  { /* decode 2 bytes, normal case (bot reach end of string). */
+    uint8_t encoded[] = { 0xFF, 0x7F, 0xFF };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == 2);
+    assert(length == 0x3FFF);
+  }
+  { /* weird case, but still valid. */
+    uint8_t encoded[] = { 0x80, 0x00 };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == sizeof(encoded));
+    assert(length == 0);
+  }
+  { /* test max length */
+    uint8_t encoded[] = { 0x87, 0xFF, 0xFF, 0xFF, 0x7F };
+    assert(VPD_OK == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(consumed == sizeof(encoded));
+    assert(length == 0x7FFFFFFF);
+  }
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
 int testEncodeVpdString() {
   unsigned char expected[] = {
     VPD_TYPE_STRING,
@@ -89,6 +152,7 @@ int testEncodeVpdString() {
   return TEST_OK;
 }
 
+
 int testEncodeVpdStringPadding() {
   unsigned char expected[] = {
     VPD_TYPE_STRING,
@@ -106,6 +170,7 @@ int testEncodeVpdStringPadding() {
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
 }
+
 
 int testEncodeMultiStrings() {
   unsigned char expected[] = {
@@ -130,6 +195,7 @@ int testEncodeMultiStrings() {
   return TEST_OK;
 }
 
+
 int testContainer() {
   unsigned char expected[] = {
     VPD_TYPE_STRING,
@@ -151,12 +217,44 @@ int testContainer() {
   return TEST_OK;
 }
 
+
+/* Based on previous test cases:
+ *
+ * KEY=VALUE --> encode --> decode --> expected KEY=VALUE
+ */
+int testDecodeVpdString() {
+  unsigned char expected[] = {
+    VPD_TYPE_STRING,
+    0x03, 'K', 'E', 'Y',
+    0x08, 'V', 'A', 'L', 'U', 'E', '\0', '\0', '\0',
+  };
+  unsigned char buf[256];
+  int consumed = 0;
+  struct PairContainer container;
+
+  initContainer(&container);
+  assert(VPD_OK == decodeVpdString(sizeof(expected), expected,
+                                   &container, &consumed));
+  assert(sizeof(expected) == consumed);
+
+  consumed = 0;
+  encodeContainer(&container, sizeof(buf), buf, &consumed);
+  assert(sizeof(expected) == consumed);
+  assert(!memcmp(expected, buf, consumed));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
 int main() {
   assert(TEST_OK == testEncodeLen());
+  assert(TEST_OK == testDecodeLen());
   assert(TEST_OK == testEncodeVpdString());
   assert(TEST_OK == testEncodeVpdStringPadding());
   assert(TEST_OK == testEncodeMultiStrings());
   assert(TEST_OK == testContainer());
+  assert(TEST_OK == testDecodeVpdString());
 
   printf("SUCCESS!\n");
   return 0;

@@ -20,6 +20,8 @@
 #ifndef __LIB_VPD__
 #define __LIB_VPD__
 
+#include <inttypes.h>
+
 enum {
   VPD_OK = 0,
   VPD_FAIL,
@@ -28,6 +30,7 @@ enum {
 enum {
   VPD_TYPE_TERMINATOR = 0,
   VPD_TYPE_STRING,
+  VPD_TYPE_IMPLICIT_TERMINATOR = 0xff,
 };
 
 enum {
@@ -54,15 +57,37 @@ struct PairContainer {
  *  |More|      Length      |  ...
  *  +----+------------------+
  *
+ * The encode_buf points to the actual position we are going to store.
+ * encoded_len will return the exact bytes we encoded in this function.
  * Returns fail if the buffer is not long enough.
  */
 int encodeLen(
-    const int len,
-    unsigned char *output_buf,
-    const int max_buffer_len,
-    int *generated_len);
+    const int32_t len,
+    uint8_t *encode_buf,
+    const int32_t max_len,
+    int32_t *encoded_len);
 
-/*  Encodes the terminator.
+/* Given an encoded string, this functions decodes the length field which varies
+ * from 1 byte to many bytes.
+ *
+ * The in points the actual byte going to be decoded. The *length returns
+ * the decoded length field. The number of consumed bytes will be stroed in
+ * decoded_len.
+ *
+ * Returns VPD_FAIL if more bit is 1, but actually reaches the end of string.
+ */
+int decodeLen(
+    const int32_t max_len,
+    const uint8_t *in,
+    int32_t *length,
+    int32_t *decoded_len);
+
+
+/* Encodes the terminator.
+ * When calling, the output_buf should point to the start of buffer while
+ * *generated_len should contain how many bytes exist in buffer now.
+ * After return, *generated_len would be plused the number of bytes generated
+ * in this function.
  */
 int encodeVpdTerminator(
     const int max_buffer_len,
@@ -81,6 +106,11 @@ int encodeVpdTerminator(
  * max_buffer_len, this function returns fail. If the buffer is long enough,
  * the generated_len will be updated.
  *
+ * When calling, the output_buf should point to the start of buffer while
+ * *generated_len should contain how many bytes exist in buffer now.
+ * After return, *generated_len would be plused the number of bytes generated
+ * in this function.
+ *
  * The initial value of *generated_len can be non-zero, so that this value
  * can be used between multiple calls to encodeVpd2Pair().
  */
@@ -91,6 +121,22 @@ int encodeVpdString(
     const int max_buffer_len,
     unsigned char *output_buf,
     int *generated_len);
+
+
+/* Given the encoded string, this function consumes a pair of {len, key, value}.
+ * The result will be added into the container. The *consumed will be plused
+ * the number of bytes consumed in this function.
+ *
+ * The input_buf points to the first byte of the input buffer.
+ *
+ * The *consumed starts from 0, which is actually the next byte to be decoded.
+ * It can be non-zero to be used in multiple calls.
+ */
+int decodeVpdString(
+    const int32_t max_len,
+    const uint8_t *input_buf,
+    struct PairContainer *container,
+    int32_t *consumed);
 
 
 /***********************************************************************

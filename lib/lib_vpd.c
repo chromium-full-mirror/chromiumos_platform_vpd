@@ -32,53 +32,59 @@
  * Returns fail if the buffer is not long enough.
  */
 int encodeLen(
-    const int len,
-    unsigned char *output_buf,
-    const int max_buffer_len,
-    int *generated_len) {
+    const int32_t len,
+    uint8_t *encode_buf,
+    const int32_t max_len,
+    int32_t *encoded_len) {
   unsigned int shifting;
   unsigned int reversed_7bits = 0;
   int out_index = 0;
 
-  assert(generated_len);
+  assert(encoded_len);
 
   if (len < 0) return VPD_FAIL;
   shifting = len;
   /* reverse the len for every 7-bit. The little endian. */
-  for (*generated_len = 0; shifting; (*generated_len)++) {
+  for (*encoded_len = 0; shifting; (*encoded_len)++) {
     reversed_7bits = (reversed_7bits << 7) | (shifting & 0x7f);
     shifting >>= 7;
   }
-  if (*generated_len > max_buffer_len) return VPD_FAIL;
-  if (!*generated_len) *generated_len = 1;  /* output at least 1 byte */
+  if (*encoded_len > max_len) return VPD_FAIL;
+  if (!*encoded_len) *encoded_len = 1;  /* output at least 1 byte */
 
   /* Output in reverse order, now big endian. */
-  while (out_index < *generated_len) {
+  while (out_index < *encoded_len) {
     /* always set MORE flag */
-    output_buf[out_index++] = 0x80 | (reversed_7bits & 0x7f);
+    encode_buf[out_index++] = 0x80 | (reversed_7bits & 0x7f);
     reversed_7bits >>= 7;
   }
-  output_buf[out_index - 1] &= 0x7f;  /* clear the MORE flag in last byte */
+  encode_buf[out_index - 1] &= 0x7f;  /* clear the MORE flag in last byte */
 
   return VPD_OK;
 }
 
-/* FIXME: not tested yet */
-int decodeLen(
-    const unsigned char *in,
-    int *decoded_len,
-    int *consumed) {
-  int more;
 
+int decodeLen(
+    const int32_t max_len,
+    const uint8_t *in,
+    int32_t *length,
+    int32_t *decoded_len) {
+  uint8_t more;
+  int i = 0;
+
+  assert(length);
   assert(decoded_len);
 
-  *decoded_len = 0;
+  *length = 0;
   do {
-    more = *in & 0x80;
-    *decoded_len <<= 7;
-    *decoded_len |= *in & 0x7f;
-    in++;
+    if (i >= max_len) return VPD_FAIL;
+    more = in[i] & 0x80;
+    *length <<= 7;
+    *length |= in[i] & 0x7f;
+    ++i;
   } while (more);
+
+  *decoded_len = i;
 
   return VPD_OK;
 }
@@ -92,7 +98,7 @@ int encodeVpdTerminator(
     int *generated_len) {
   assert(generated_len);
 
-  if (*generated_len + 1 > max_buffer_len) return VPD_FAIL;
+  if (*generated_len >= max_buffer_len) return VPD_FAIL;
 
   output_buf += *generated_len;  /* move cursor to end of string */
   *(output_buf++) = VPD_TYPE_TERMINATOR;
@@ -121,7 +127,7 @@ int encodeVpdString(
   output_buf += *generated_len;  /* move cursor to end of string */
 
   /* encode type */
-  if (*generated_len + 1 > max_buffer_len) return VPD_FAIL;
+  if (*generated_len >= max_buffer_len) return VPD_FAIL;
   *(output_buf++) = VPD_TYPE_STRING;
   (*generated_len)++;
 
@@ -163,6 +169,62 @@ int encodeVpdString(
   output_buf += pad_len;
   *generated_len += pad_len;
 
+  return VPD_OK;
+}
+
+
+/* Sequentially decodes type, key, and value.
+ */
+int decodeVpdString(
+    const int32_t max_len,
+    const uint8_t *input_buf,
+    struct PairContainer *container,
+    int32_t *consumed) {
+  int type;
+  int32_t length;
+  int32_t decoded_len;
+  uint8_t *key, *value;
+
+  /* type */
+  if (*consumed >= max_len) return VPD_FAIL;
+  type = input_buf[*consumed];
+  switch (type) {
+    case VPD_TYPE_STRING:
+      (*consumed)++;
+
+      /* key */
+      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
+                              &length, &decoded_len)) {
+        return VPD_FAIL;
+      }
+      *consumed += decoded_len;
+
+      key = malloc(length + 1);
+      assert(key);
+      strncpy(key, &input_buf[*consumed], length);
+      key[length] = '\0';
+      *consumed += length;
+
+      /* value */
+      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
+                              &length, &decoded_len)) {
+        return VPD_FAIL;
+      }
+      *consumed += decoded_len;
+
+      value = malloc(length + 1);
+      assert(value);
+      strncpy(value, &input_buf[*consumed], length);
+      value[length] = '\0';
+      *consumed += length;
+
+      /* Add it into container */
+      setString(container, key, value, length);
+      break;
+    default:
+      return VPD_FAIL;
+      break;
+  }
   return VPD_OK;
 }
 
@@ -218,8 +280,15 @@ void setString(struct PairContainer *container,
     assert(new_pair);
 
     fillStringPair(new_pair, key, value, pad_len);
-    new_pair->next = container->first;
-    container->first = new_pair;
+
+    /* append this pair to the end of list. to keep the order */
+    if (found = container->first) {
+      while (found->next) found = found->next;
+      found->next = new_pair;
+    } else {
+      container->first = new_pair;
+    }
+    new_pair->next = NULL;
   }
 }
 
