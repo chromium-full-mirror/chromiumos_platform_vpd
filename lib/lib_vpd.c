@@ -17,9 +17,15 @@
  *
  */
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lib/lib_vpd.h"
+
+
+#ifndef MIN
+#define MIN(a, b) ((a < b) ? a : b)
+#endif
 
 
 /* Encodes the len into multiple bytes with the following format.
@@ -320,6 +326,80 @@ int encodeContainer(const struct PairContainer *container,
       return VPD_FAIL;
     }
   }
+  return VPD_OK;
+}
+
+/* Export the container content with human-readable text. */
+int exportContainer(const int export_type,
+                    const struct PairContainer *container,
+                    const int max_buf_len,
+                    uint8_t *buf,
+                    int *generated) {
+  struct StringPair *str;
+  int index;
+
+  assert(generated);
+  index = *generated;
+
+  for (str = container->first; str; str = str->next) {
+    int copy_len;
+
+    if (export_type == VPD_EXPORT_AS_PARAMETER) {
+      char pad_str[32];
+      int pad_len;
+
+      snprintf(pad_str, sizeof(pad_str), "-p %d -s ", str->pad_len);
+      pad_len = strlen(pad_str);
+      if ((index + pad_len) > max_buf_len) return VPD_FAIL;
+      strcpy(&buf[index], pad_str);
+      index += pad_len;
+    }
+
+    /* double quote */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '"';
+
+    /* output key */
+    if ((index + strlen(str->key)) > max_buf_len) return VPD_FAIL;
+    strcpy(&buf[index], str->key);
+    index += strlen(str->key);
+
+    /* double quote */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '"';
+
+    /* equal sign */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '=';
+
+    /* double quote */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '"';
+
+    /* output value */
+    if (str->pad_len != VPD_AS_LONG_AS)
+      copy_len = MIN(str->pad_len, strlen(str->value));
+    else
+      copy_len = strlen(str->value);
+    if ((index + copy_len) > max_buf_len) return VPD_FAIL;
+    memcpy(&buf[index], str->value, copy_len);
+    index += copy_len;
+
+    /* double quote */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '"';
+
+    /* new line */
+    if ((index + 1 > max_buf_len)) return VPD_FAIL;
+    buf[index++] = '\n';
+  }
+
+  /* null terminator */
+  if ((index + 1 > max_buf_len)) return VPD_FAIL;
+  buf[index++] = '\0';
+
+  *generated = index;
+
   return VPD_OK;
 }
 

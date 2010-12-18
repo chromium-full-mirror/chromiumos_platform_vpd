@@ -84,7 +84,8 @@ int vpd_append_string()
  * obtaining information on its own. These arguments need to go away.
  */
 struct vpd_entry *vpd_create_eps(uint16_t structure_table_len,
-                                 uint16_t num_structures) {
+                                 uint16_t num_structures,
+                                 uint32_t eps_base) {
   struct vpd_entry *eps = NULL;
 
   /* size of structure only, no strings */
@@ -108,14 +109,9 @@ struct vpd_entry *vpd_create_eps(uint16_t structure_table_len,
   /* FIXME: implement vpd_table_length() and vpd_num_structures() */
   eps->table_length = structure_table_len;
 
-#ifdef CONFIG_EPS_STRUCTURE_TABLE_ADDRESS
-  /* FIXME: this needs to be better */
-  eps->table_address = CONFIG_EPS_STRUCTURE_TABLE_ADDRESS;
-#else
-  /* immediately follow the entry point structure, assuming EPS is at
-     address 0x00000000 */
-  eps->table_address = eps->entry_length;
-#endif
+  /* immediately follow the entry point structure */
+  eps->table_address = eps_base + eps->entry_length;
+
 #ifdef CONFIG_EPS_NUM_STRUCTURES
   eps->table_entry_count = CONFIG_EPS_NUM_STRUCTURES;
 #else

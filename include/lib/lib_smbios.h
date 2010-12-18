@@ -23,10 +23,9 @@
 
 #include <inttypes.h>
 
-#define CONFIG_EPS_STRUCTURE_TABLE_ADDRESS 0x100
-
 struct vpd_entry *vpd_create_eps(unsigned short structure_table_len,
-                                 unsigned short num_structures);
+                                 unsigned short num_structures,
+                                 uint32_t eps_base);
 int vpd_append_type241(uint16_t handle, uint8_t **buf,
                        size_t len, const char *uuid, uint32_t offset,
                        uint32_t size, const char *vendor,

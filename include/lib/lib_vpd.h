@@ -37,6 +37,11 @@ enum {
   VPD_AS_LONG_AS = -1,
 };
 
+enum {
+  VPD_EXPORT_KEY_VALUE = 1,
+  VPD_EXPORT_AS_PARAMETER,
+};
+
 
 struct StringPair {
   unsigned char *key;
@@ -165,6 +170,21 @@ void mergeContainer(struct PairContainer *dst,
 int encodeContainer(const struct PairContainer *container,
                     const int max_buf_len,
                     unsigned char *buf,
+                    int *generated);
+
+/*
+ * Export the container content with human-readable text.
+ *
+ * The buf points to the first byte of buffer and *generated contains the number
+ * of bytes already existed in buffer.
+ *
+ * Afterward, the *generated will be plused on exact bytes this function has
+ * generated.
+ */
+int exportContainer(const int export_type,
+                    const struct PairContainer *container,
+                    const int max_buf_len,
+                    uint8_t *buf,
                     int *generated);
 
 void destroyContainer(struct PairContainer *container);
