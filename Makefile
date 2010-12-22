@@ -1,6 +1,6 @@
 CC?=cc
-CFLAGS=-g -static -Iinclude/ -Wimplicit
-LDFLAGS=-luuid
+CFLAGS+=-g -static -Iinclude/ -Wimplicit
+LDFLAGS+=-luuid
 
 all: binary
 
