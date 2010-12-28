@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  *
- * FIXME: this code is absolutely atrocious and needs to be re-written
+ * Ported from mosys project (http://code.google.com/p/mosys/)
  */
 
 #include <stdio.h>
@@ -60,13 +60,6 @@ int vpd_sizeof_strings(void *table)
 
   return size;
 }
-
-#if 0
-/* returns updated length of strings, <0 to indicate failure */
-int vpd_append_string()
-{
-}
-#endif
 
 /**
  * vpd_crete_eps - create an entry point structure
@@ -235,7 +228,7 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
   memset(&data->reserved[0], 0, 5);
 
   if (uuid_parse(uuid, &data->uuid[0]) < 0) {
-    printf("invalid UUID \"%s\" specified\n", uuid);
+    fprintf(stderr, "invalid UUID \"%s\" specified\n", uuid);
     goto vpd_create_type241_fail;
   }
 

@@ -23,10 +23,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
+#include "lib/flashrom.h"
+#include "lib/fmap.h"
 #include "lib/lib_vpd.h"
 #include "lib/lib_smbios.h"
 #include "lib/vpd.h"
 #include "lib/vpd_tables.h"
+
+/* The buffer length. Right now the VPD partition size on flash is 128KB. */
+#define BUF_LEN (128 * 1024)
+
+static uint8_t flashrom_tmp_file[] = "/tmp/vpd.flashrom.XXXXXX";
 
 /* 2 containers:
  *   file:      stores decoded pairs from file.
@@ -41,13 +48,20 @@ struct PairContainer argument;
 int pad_value_len = VPD_AS_LONG_AS;
 
 /* The output buffer */
-unsigned char buf[65536];
+unsigned char buf[BUF_LEN];
 int buf_len = 0;
 int max_buf_len = sizeof(buf);
 
-/* TODO: refine this after we integrate fmap */
+/* The EPS base address is used to fill the EPS table entry. */
 uint32_t eps_base = GOOGLE_VPD_2_0_EPS_BASE;
 
+/* the fmap name of VPD. */
+uint8_t fmap_vpd_area_name[FMAP_STRLEN] = "RO VPD";
+/* If found_vpd, replace the VPD partition when saveFile().
+ * If not found, always create new file when saveFlie(). */
+int found_vpd = 0;
+/* The VPD offset and size in buf[] */
+off_t vpd_offset = 0, vpd_size = 0;
 
 /* for debug purpose */
 void dumpBuf() {
@@ -156,7 +170,10 @@ error:
 int loadFile(const char *filename, struct PairContainer *container) {
   FILE *fp;
   int file_size;
-  char *read_buf;
+  uint8_t *read_buf;
+  off_t sig_offset;
+  struct fmap *fmap;
+  uint8_t *vpd_buf;
   struct vpd_entry *eps;
   struct vpd_header *header;
   struct vpd_table_binary_blob_pointer *data;
@@ -177,12 +194,54 @@ int loadFile(const char *filename, struct PairContainer *container) {
   read_buf = malloc(file_size);
   assert(read_buf);
   if (file_size != fread(read_buf, 1, file_size, fp)) {
-    printf("Reading file [%s] failed.\n", filename);
+    fprintf(stderr, "Reading file [%s] failed.\n", filename);
     retval = 1;
     goto teardown;
   }
-  eps = (struct vpd_entry *)read_buf;
   fclose(fp);
+
+  /* scan the file and find out the VPD partition. */
+  sig_offset = fmapFind(read_buf, file_size);
+  if (-1 == sig_offset) {
+    /* FMAP signature is not found, assume it is pure VPD content. */
+    vpd_buf = read_buf;
+    eps = (struct vpd_entry *)vpd_buf;
+  } else {
+    int i;
+
+    fmap = (struct fmap *)&read_buf[sig_offset];
+    for(i = 0; i < fmap->nareas; i++) {
+      fmapNormalizeAreaName(fmap->areas[i].name);
+    }
+
+    if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
+                               &vpd_offset, &vpd_size)) {
+      fprintf(stderr,
+              "FMAP and area are found, eps_base changed from 0x%x to 0x%lx\n",
+              eps_base, vpd_offset);
+      eps_base = vpd_offset;
+      vpd_buf = &read_buf[vpd_offset];
+      eps = (struct vpd_entry *)vpd_buf;
+    } else {
+      fprintf(stderr, "The VPD partition [%s] is not found.\n",
+              fmap_vpd_area_name);
+      retval = 1;
+      goto teardown;
+    }
+
+    /* jump if the VPD partition is not recognized. */
+    if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+      /* But OKAY if the VPD partition is all-FF, which is un-used. */
+      if (memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+        fprintf(stderr, "FMAP found, but SMBIOS signature is wrong.\n");
+        goto teardown;
+      }
+    }
+
+    /* mark the VPD is found, so that saveFile() knows where to overwrite
+     *  (vpd_offset, vpd_size). */
+    found_vpd = 1;
+  }
 
   /* Get type 241 blob */
   header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
@@ -191,9 +250,10 @@ int loadFile(const char *filename, struct PairContainer *container) {
 
   /* iterate all pairs */
   for (index = data->offset - eps_base;  /* skip the EPS */
-       read_buf[index] != VPD_TYPE_TERMINATOR &&
-       read_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-    if (VPD_OK != decodeVpdString(file_size, read_buf, container, &index)) {
+       vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+       vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+    if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
+      fprintf(stderr, "decodeVpdString() error.\n");
       retval = 1;
       goto teardown;
     }
@@ -213,35 +273,59 @@ int saveFile(const struct PairContainer *container, const char *filename) {
 
   /* encode into buffer */
   if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
-    printf("encodeContainer() error.\n");
+    fprintf(stderr, "encodeContainer() error.\n");
     retval = 1;
     goto teardown;
   }
   if (VPD_OK != encodeVpdTerminator(max_buf_len, buf, &buf_len)) {
-    printf("Out of space for terminator.\n");
+    fprintf(stderr, "Out of space for terminator.\n");
     retval = 1;
     goto teardown;
   }
 
   if (VPD_OK != buildEpsAndTables(GOOGLE_VPD_2_0_OFFSET, buf_len,
                                   sizeof(eps), eps, &eps_len)) {
-    printf("Cannot build EPS.\n");
+    fprintf(stderr, "Cannot build EPS.\n");
     retval = 1;
     goto teardown;
   }
   assert(eps_len <= GOOGLE_VPD_2_0_OFFSET);
   eps_len = GOOGLE_VPD_2_0_OFFSET;
 
-  /* write into file */
-  if (!(fp = fopen(filename, "w"))) {
-    printf("File [%s] cannot be opened for write.\n", filename);
+  if (found_vpd) {
+    /* We found VPD in file, which means file is existed.
+     * Instead of truncating the whole file, open to write partial. */
+    if (!(fp = fopen(filename, "r+"))) {
+      fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
+      retval = 1;
+      goto teardown;
+    }
+    /* Move file cursor to VPD section */
+    if (fseek(fp, vpd_offset, SEEK_SET)) {
+      fprintf(stderr,"fseek(0x%lx) error: %s\n", vpd_offset, strerror(errno));
+      retval = 1;
+      goto teardown;
+    }
+  } else {
+    /* VPD is not found, which means the file is pure VPD data.
+     * Always creates the new file and overwrites the original content. */
+    if (!(fp = fopen(filename, "w+"))) {
+      fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
+      retval = 1;
+      goto teardown;
+    }
+  }
+  if (fwrite(eps, eps_len, 1, fp) != 1) {
+    fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
     retval = 1;
     goto teardown;
-  } else {
-    fwrite(eps, eps_len, 1, fp);
-    fwrite(buf, buf_len, 1, fp);
-    fclose(fp);
   }
+  if (fwrite(buf, buf_len, 1, fp) != 1) {
+    fprintf(stderr, "fwrite(VPD) error (%s)\n", strerror(errno));
+    retval = 1;
+    goto teardown;
+  }
+  fclose(fp);
 
 teardown:
   return retval;
@@ -256,6 +340,7 @@ static void usage(const char *progname) {
   printf("      -E <address>     EPS base address (default:0x240000).\n");
   printf("      -s <key=value>   To add/change a string value.\n");
   printf("      -p <pad length>  Pad if length is shorter.\n");
+  printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
   printf("\n");
 }
@@ -264,18 +349,21 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   int retval = 0;
-  const char *optstring = "hf:s:p:lE:";
+  const char *optstring = "hf:E:s:p:i:l";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
     {"epsbase", 0, 0, 'E'},
     {"string", 0, 0, 's'},
     {"pad", 0, 0, 'p'},
+    {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
   };
   char *filename = NULL;
+  int write_back_to_flash = 0;
   int list_it = 0;
   int modified = 0;
+  int fd;
 
   initContainer(&file);
   initContainer(&argument);
@@ -300,7 +388,7 @@ int main(int argc, char *argv[]) {
         /* FIXME: this is not a stable way to detect error because
          *        implementation may (or may not) assign errno. */
         if (!eps_base && errno == EINVAL) {
-          printf("Not a number for EPS base address: %s\n", optarg);
+          fprintf(stderr, "Not a number for EPS base address: %s\n", optarg);
           retval = 1;
           goto teardown;
         }
@@ -308,7 +396,7 @@ int main(int argc, char *argv[]) {
 
       case 's':
         if (VPD_OK != parseString(optarg)) {
-          printf("The string [%s] cannot be parsed.\n\n", optarg);
+          fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           retval = 1;
           goto teardown;
         }
@@ -322,10 +410,14 @@ int main(int argc, char *argv[]) {
         /* FIXME: this is not a stable way to detect error because
          *        implementation may (or may not) assign errno. */
         if (!pad_value_len && errno == EINVAL) {
-          printf("Not a number for pad length: %s\n", optarg);
+          fprintf(stderr, "Not a number for pad length: %s\n", optarg);
           retval = 1;
           goto teardown;
         }
+        break;
+
+      case 'i':
+        snprintf(fmap_vpd_area_name, sizeof(fmap_vpd_area_name), "%s", optarg);
         break;
 
       case 'l':
@@ -333,40 +425,69 @@ int main(int argc, char *argv[]) {
         break;
 
       default:
-        printf("Invalid option, use --help for usage.\n");
+        fprintf(stderr, "Invalid option, use --help for usage.\n");
         retval = 1;
         goto teardown;
         break;
     }
   }
 
-  /* Sanity check */
-  if (!filename) {
-    printf("Need specify filename.\n\n");
-    usage(argv[0]);
+  fd = mkstemp(flashrom_tmp_file);
+  if (fd < 0) {
+    fprintf(stderr, "mkstemp(%s) failed\n", flashrom_tmp_file);
     retval = 1;
     goto teardown;
   }
 
+  /* to avoid malicious attack */
+  fmapNormalizeAreaName(fmap_vpd_area_name);
+
+  /* if no filename is specified, call flashrom to read from flash. */
+  if (!filename) {
+    if (FLASHROM_OK != flashromRead(flashrom_tmp_file)) {
+      fprintf(stderr, "flashromRead() error!\n");
+      retval = 1;
+      goto teardown;
+    }
+    write_back_to_flash = 1;
+    filename = strdup(flashrom_tmp_file);
+  }
+
   if (retval = loadFile(filename, &file)) {
+    fprintf(stderr, "loadFile('%s') error.\n", filename);
     goto teardown;
   }
 
   mergeContainer(&file, &argument);
 
-  if (modified && (retval = saveFile(&file, filename))) {
-    goto teardown;
-  }
-
   if (list_it) {
-    buf_len = 0;
-    if (VPD_OK != exportContainer(VPD_EXPORT_KEY_VALUE,
-                                  &file, max_buf_len, buf, &buf_len)) {
-      printf("exportContainer(): Cannot generate string.\n");
+    /* Reserve larger size because the exporting generates longer string than
+     * the encoded data. */
+    uint8_t list_buf[BUF_LEN * 2];
+    int list_len = 0;
+
+    if (VPD_OK != exportContainer(VPD_EXPORT_KEY_VALUE, &file,
+                                  sizeof(list_buf), list_buf, &list_len)) {
+      fprintf(stderr, "exportContainer(): Cannot generate string.\n");
       retval = 1;
       goto teardown;
     }
-    printf("%s", buf);
+    printf("%s", list_buf);
+  }
+
+  if (modified) {
+    if (retval = saveFile(&file, filename)) {
+      fprintf(stderr, "saveFile('%s') error.\n", filename);
+      goto teardown;
+    }
+
+    if (write_back_to_flash) {
+      if (FLASHROM_OK != flashromPartialWrite(filename, vpd_offset, vpd_size)) {
+        fprintf(stderr, "flashromPartialWrite() error.\n");
+        retval = 1;
+        goto teardown;
+      }
+    }
   }
 
 teardown:
