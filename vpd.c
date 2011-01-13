@@ -167,7 +167,8 @@ error:
 }
 
 
-int loadFile(const char *filename, struct PairContainer *container) {
+int loadFile(const char *filename, struct PairContainer *container,
+             int overwrite_it) {
   FILE *fp;
   int file_size;
   uint8_t *read_buf;
@@ -206,6 +207,12 @@ int loadFile(const char *filename, struct PairContainer *container) {
     /* FMAP signature is not found, assume it is pure VPD content. */
     vpd_buf = read_buf;
     eps = (struct vpd_entry *)vpd_buf;
+
+    /* In overwrite mode, ignore all existing data. */
+    if (overwrite_it) {
+      retval = 0;
+      goto teardown;
+    }
   } else {
     int i;
 
@@ -222,6 +229,11 @@ int loadFile(const char *filename, struct PairContainer *container) {
       eps_base = vpd_offset;
       vpd_buf = &read_buf[vpd_offset];
       eps = (struct vpd_entry *)vpd_buf;
+
+      /* In overwrite mode, the VPD content is erased before reading. */
+      if (overwrite_it) {
+        memset(vpd_buf, 0xff, vpd_size);
+      }
     } else {
       fprintf(stderr, "The VPD partition [%s] is not found.\n",
               fmap_vpd_area_name);
@@ -260,7 +272,8 @@ int loadFile(const char *filename, struct PairContainer *container) {
   }
 
 teardown:
-    free(read_buf);
+  free(read_buf);
+
   return retval;
 }
 
@@ -342,6 +355,7 @@ static void usage(const char *progname) {
   printf("      -p <pad length>  Pad if length is shorter.\n");
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
+  printf("      -O               Overwrite current VPD partition.\n");
   printf("\n");
 }
 
@@ -349,7 +363,7 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   int retval = 0;
-  const char *optstring = "hf:E:s:p:i:l";
+  const char *optstring = "hf:E:s:p:i:lO";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
@@ -358,10 +372,12 @@ int main(int argc, char *argv[]) {
     {"pad", 0, 0, 'p'},
     {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
+    {"overwrite", 0, 0, 'O'},
   };
   char *filename = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
+  int overwrite_it = 0;
   int modified = 0;
   int fd;
 
@@ -424,6 +440,12 @@ int main(int argc, char *argv[]) {
         list_it = 1;
         break;
 
+      case 'O':
+        overwrite_it = 1;
+        modified = 1;  /* This option forces to write empty data back even
+                        * no new pair is given. */
+        break;
+
       default:
         fprintf(stderr, "Invalid option, use --help for usage.\n");
         retval = 1;
@@ -439,7 +461,7 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  /* to avoid malicious attack */
+  /* to avoid malicious attack, we replace suspicious chars. */
   fmapNormalizeAreaName(fmap_vpd_area_name);
 
   /* if no filename is specified, call flashrom to read from flash. */
@@ -453,7 +475,7 @@ int main(int argc, char *argv[]) {
     filename = strdup(flashrom_tmp_file);
   }
 
-  if (retval = loadFile(filename, &file)) {
+  if (retval = loadFile(filename, &file, overwrite_it)) {
     fprintf(stderr, "loadFile('%s') error.\n", filename);
     goto teardown;
   }
