@@ -245,7 +245,9 @@ int loadFile(const char *filename, struct PairContainer *container,
     if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
       /* But OKAY if the VPD partition is all-FF, which is un-used. */
       if (memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
-        fprintf(stderr, "FMAP found, but SMBIOS signature is wrong.\n");
+        fprintf(stderr, "FMAP found, but SMBIOS signature is not matched.\n");
+        fprintf(stderr, "You may use -O to overwrite the data.\n");
+        retval = 1;
         goto teardown;
       }
     }
