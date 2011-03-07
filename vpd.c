@@ -348,9 +348,14 @@ teardown:
 
 
 static void usage(const char *progname) {
+  printf("Chrome OS VPD 2.0 utility --\n");
+#ifdef VPD_VERSION
+  printf("%s\n", VPD_VERSION);
+#endif
+  printf("\n");
   printf("Usage: %s [OPTION] ...\n", progname);
   printf("   OPTIONs include:\n");
-  printf("      -h               This help page.\n");
+  printf("      -h               This help page and version.\n");
   printf("      -f <filename>    The output file name.\n");
   printf("      -E <address>     EPS base address (default:0x240000).\n");
   printf("      -s <key=value>   To add/change a string value.\n");

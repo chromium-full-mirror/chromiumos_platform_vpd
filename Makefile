@@ -1,5 +1,6 @@
 CC?=cc
-CFLAGS+=-g -static -Iinclude/ -Wimplicit
+VERSION := $(shell ./util/getversion.sh)
+CFLAGS+=-g -static -Iinclude/ -Wimplicit -D'VPD_VERSION="$(VERSION)"'
 LDFLAGS+=-luuid
 
 all: binary
