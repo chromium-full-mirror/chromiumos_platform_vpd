@@ -18,11 +18,12 @@
  */
 #include <assert.h>
 #include <errno.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
+#include <uuid/uuid.h>
 #include "lib/flashrom.h"
 #include "lib/fmap.h"
 #include "lib/lib_vpd.h"
@@ -52,16 +53,43 @@ unsigned char buf[BUF_LEN];
 int buf_len = 0;
 int max_buf_len = sizeof(buf);
 
-/* The EPS base address is used to fill the EPS table entry. */
-uint32_t eps_base = GOOGLE_VPD_2_0_EPS_BASE;
+/* The EPS base address used to fill the EPS table entry.
+ * If the VPD partition can be found in fmap, this points to the starting
+ * offset of VPD partition. If not found, this is used to be the base address
+ * to increase SPD and VPD 2.0 offset fields.
+ *
+ * User can overwrite this by -E argument.
+ */
+uint32_t eps_base = GOOGLE_EPS_BASE;
 
 /* the fmap name of VPD. */
 uint8_t fmap_vpd_area_name[FMAP_STRLEN] = "RO VPD";
+
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFlie(). */
 int found_vpd = 0;
-/* The VPD offset and size in buf[] */
-off_t vpd_offset = 0, vpd_size = 0;
+
+/* The VPD partition offset and size in buf[]. The whole partition includes:
+ *
+ *   SMBIOS EPS
+ *   SMBIOS tables[]
+ *   SPD
+ *   VPD 2.0 data
+ *
+ * For those offset values below, ABSENT means not presented in buffer.
+ */
+off_t vpd_offset = 0, vpd_size;  /* The whole partition */
+/* Below offset are related to vpd_offset and assume positive.
+ * Those are used in saveFile() to write back data. */
+off_t eps_offset = 0;  /* EPS's starting address. Tables[] is following. */
+off_t spd_offset = GOOGLE_SPD_OFFSET;  /* SPD address .*/
+off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
+
+/* This points to the SPD data if it is availiable when loadFile().
+ * The memory is allocated in loadFile(), will be used in saveFile(),
+ * and freed at end of main(). */
+uint8_t *spd_data = NULL;
+int32_t spd_len = 256;  /* max value for DDR3 */
 
 /* for debug purpose */
 void dumpBuf() {
@@ -77,7 +105,6 @@ void dumpBuf() {
  *  the size of blob, the is function generates an SMBIOS ESP.
  */
 int buildEpsAndTables(
-    const int offset_blob,
     const int size_blob,
     const int max_buf_len,
     unsigned char *buf,
@@ -93,10 +120,24 @@ int buildEpsAndTables(
 
   buf += *generated;
 
-  /* Generate type 241 */
+  /* Generate type 241 - SPD data */
   table_len = vpd_append_type241(0, &table, table_len,
+                                 GOOGLE_SPD_UUID,
+                                 eps_base + GOOGLE_SPD_OFFSET,
+                                 spd_len,  /* Max length for DDR3 */
+                                 GOOGLE_SPD_VENDOR,
+                                 GOOGLE_SPD_DESCRIPTION,
+                                 GOOGLE_SPD_VARIANT);
+  if (table_len < 0) {
+    retval = VPD_FAIL;
+    goto error_1;
+  }
+  num_structures++;
+
+  /* Generate type 241 - VPD 2.0 */
+  table_len = vpd_append_type241(1, &table, table_len,
                                  GOOGLE_VPD_2_0_UUID,
-                                 eps_base + offset_blob,
+                                 eps_base + GOOGLE_VPD_2_0_OFFSET,
                                  size_blob,
                                  GOOGLE_VPD_2_0_VENDOR,
                                  GOOGLE_VPD_2_0_DESCRIPTION,
@@ -108,7 +149,7 @@ int buildEpsAndTables(
   num_structures++;
 
   /* Generate type 127 */
-  table_len = vpd_append_type127(1, &table, table_len);
+  table_len = vpd_append_type127(2, &table, table_len);
   if (table_len < 0) {
     retval = VPD_FAIL;
     goto error_1;
@@ -178,11 +219,14 @@ int loadFile(const char *filename, struct PairContainer *container,
   struct vpd_entry *eps;
   struct vpd_header *header;
   struct vpd_table_binary_blob_pointer *data;
+  uint8_t spd_uuid[16], vpd_2_0_uuid[16];
+  int expected_handle = 0;
+  int table_len;
   int index;
   int retval = 0;
 
   if (!(fp = fopen(filename, "r"))) {
-    fprintf(stderr, "* File [%s] cannot be opened for read. Ignored.\n",
+    fprintf(stderr, "[WARN] File [%s] cannot be opened for read. Ignored.\n",
             filename);
     return 0;
   }
@@ -204,7 +248,7 @@ int loadFile(const char *filename, struct PairContainer *container,
   /* scan the file and find out the VPD partition. */
   sig_offset = fmapFind(read_buf, file_size);
   if (-1 == sig_offset) {
-    /* FMAP signature is not found, assume it is pure VPD content. */
+    /* FMAP signature is not found, assume it is pure VPD partition. */
     vpd_buf = read_buf;
     eps = (struct vpd_entry *)vpd_buf;
 
@@ -223,16 +267,16 @@ int loadFile(const char *filename, struct PairContainer *container,
 
     if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
                                &vpd_offset, &vpd_size)) {
-      fprintf(stderr,
-              "FMAP and area are found, eps_base changed from 0x%x to 0x%lx\n",
-              eps_base, vpd_offset);
+      found_vpd = 1;  /* Mark found here then saveFile() knows where to
+                       * write back (vpd_offset, vpd_size). */
       eps_base = vpd_offset;
       vpd_buf = &read_buf[vpd_offset];
       eps = (struct vpd_entry *)vpd_buf;
 
       /* In overwrite mode, the VPD content is erased before reading. */
       if (overwrite_it) {
-        memset(vpd_buf, 0xff, vpd_size);
+        retval = 0;
+        goto teardown;
       }
     } else {
       fprintf(stderr, "The VPD partition [%s] is not found.\n",
@@ -240,37 +284,122 @@ int loadFile(const char *filename, struct PairContainer *container,
       retval = 1;
       goto teardown;
     }
+  }
+  /* Now, vpd_buf points to the VPD partition in buffer.
+   * eps points to the EPS structure, which is usually equal to vpd_buf. */
+  eps_offset = (uint8_t*)eps - vpd_buf;
 
-    /* jump if the VPD partition is not recognized. */
-    if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
-      /* But OKAY if the VPD partition is all-FF, which is un-used. */
-      if (memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
-        fprintf(stderr, "FMAP found, but SMBIOS signature is not matched.\n");
-        fprintf(stderr, "You may use -O to overwrite the data.\n");
+  /* jump if the VPD partition is not recognized. */
+  if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+    /* But OKAY if the VPD partition is all-FF, which is un-used. */
+    if (memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+      fprintf(stderr, "SMBIOS signature is not matched.\n");
+      fprintf(stderr, "You may use -O to overwrite the data.\n");
+      retval = 1;
+      goto teardown;
+    }
+    /* TODO(yjlou): need more EPS sanity checks here. */
+  }
+  /* EPS is done above. Parse structure tables below. */
+  /* Get the first type 241 blob, at the tail of EPS. */
+  header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
+  data = (struct vpd_table_binary_blob_pointer *)
+         ((uint8_t *)header + sizeof(*header));
+
+  /* TODO(yjlou): Re-factor the parsing code to support more SMBIOS entries.
+   *              The current code only supports 2 combinations:
+   *                1. Type 241 (SPD) + Type 241 (VPD 2.0) + Type 127
+   *                2. Type 241 (VPD 2.0) + Type 127
+   */
+
+  /* Now header points to the first SMBIOS entry, and data points to the
+   * first BBP entry. The first entry could be SPD data. We don't care. */
+  if (header->handle != expected_handle) {
+    fprintf(stderr, "The first handle value must be 0, but is %d.\n",
+                    header->handle);
+    retval = 1;
+    goto teardown;
+  }
+  if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) {
+    fprintf(stderr, "Expect first entry is type Binary Blob Pointer (241),"
+                    " but actually is %d\n", header->type);
+    fprintf(stderr, "You may use -O to overwrite the data.\n");
+    retval = 1;
+    goto teardown;
+  }
+  uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
+  if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
+    ++expected_handle;
+    spd_offset = data->offset - eps_base;
+    spd_len = data->size;
+    if (vpd_offset + spd_offset + spd_len >= file_size) {
+      fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
+                      "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%x\n"
+                      "        If this file is VPD partition only, try to\n"
+                      "        use -E to adjust offset values.\n",
+                      (uint32_t)vpd_offset, (uint32_t)spd_offset,
+                      spd_len, file_size);
+      retval = 1;
+      goto teardown;
+    }
+    if (!(spd_data = malloc(spd_len))) {
+      fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
+      retval = 1;
+      goto teardown;
+    }
+    memcpy(spd_data, &read_buf[vpd_offset + spd_offset], spd_len);
+
+    /* move to next table */
+    if ((table_len = vpd_type241_size(header)) < 0) {
+      fprintf(stderr, "[ERROR] Cannot get type 241 structure table length.\n");
+      retval = 1;
+      goto teardown;
+    }
+    header = (struct vpd_header*)((uint8_t*)header + table_len);
+    data = (struct vpd_table_binary_blob_pointer *)
+           ((uint8_t *)header + sizeof(*header));
+  }
+
+  /* The 2nd could be VPD 2.0 data or End Of Table. */
+  if (header->handle != expected_handle) {
+    fprintf(stderr, "The second handle value must be 1, but is %d.\n",
+                    header->handle);
+    retval = 1;
+    goto teardown;
+  }
+  uuid_parse(GOOGLE_VPD_2_0_UUID, vpd_2_0_uuid);
+  if (header->type == VPD_TYPE_BINARY_BLOB_POINTER &&
+      !memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
+    ++expected_handle;
+
+    /* iterate all pairs */
+    for (index = data->offset - eps_base;  /* skip the EPS */
+         vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+         vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+      if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
+        fprintf(stderr, "decodeVpdString() error.\n");
         retval = 1;
         goto teardown;
       }
     }
 
-    /* mark the VPD is found, so that saveFile() knows where to overwrite
-     *  (vpd_offset, vpd_size). */
-    found_vpd = 1;
-  }
-
-  /* Get type 241 blob */
-  header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
-  data = (struct vpd_table_binary_blob_pointer *)
-         ((uint8_t *)header + sizeof(*header));
-
-  /* iterate all pairs */
-  for (index = data->offset - eps_base;  /* skip the EPS */
-       vpd_buf[index] != VPD_TYPE_TERMINATOR &&
-       vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-    if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
-      fprintf(stderr, "decodeVpdString() error.\n");
+    /* move to next table */
+    if ((table_len = vpd_type241_size(header)) < 0) {
+      fprintf(stderr, "[ERROR] Cannot get type 241 structure table length.\n");
       retval = 1;
       goto teardown;
     }
+    header = (struct vpd_header*)((uint8_t*)header + table_len);
+    data = (struct vpd_table_binary_blob_pointer *)
+           ((uint8_t *)header + sizeof(*header));
+  } else {
+    fprintf(stderr, "[WARN] no VPD 2.0 BBP is found, ignored.\n");
+    retval = 0;
+    goto teardown;
+  }
+
+  if (header->type != VPD_TYPE_END) {
+    fprintf(stderr, "[WARN] we expect the last one is type 127. Ignored.\n");
   }
 
 teardown:
@@ -286,6 +415,8 @@ int saveFile(const struct PairContainer *container, const char *filename) {
   int eps_len = 0;
   int retval = 0;
 
+  memset(eps, 0, sizeof(eps));
+
   /* encode into buffer */
   if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
     fprintf(stderr, "encodeContainer() error.\n");
@@ -298,26 +429,23 @@ int saveFile(const struct PairContainer *container, const char *filename) {
     goto teardown;
   }
 
-  if (VPD_OK != buildEpsAndTables(GOOGLE_VPD_2_0_OFFSET, buf_len,
-                                  sizeof(eps), eps, &eps_len)) {
+  if (VPD_OK != buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len)) {
     fprintf(stderr, "Cannot build EPS.\n");
     retval = 1;
     goto teardown;
   }
-  assert(eps_len <= GOOGLE_VPD_2_0_OFFSET);
-  eps_len = GOOGLE_VPD_2_0_OFFSET;
+  assert(eps_len <= GOOGLE_SPD_OFFSET);
 
+  /* Write data in the following order:
+   *   1. EPS
+   *   2. SPD
+   *   3. VPD 2.0
+  */
   if (found_vpd) {
-    /* We found VPD in file, which means file is existed.
+    /* We found VPD partition in -f file, which means file is existed.
      * Instead of truncating the whole file, open to write partial. */
     if (!(fp = fopen(filename, "r+"))) {
       fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
-      retval = 1;
-      goto teardown;
-    }
-    /* Move file cursor to VPD section */
-    if (fseek(fp, vpd_offset, SEEK_SET)) {
-      fprintf(stderr,"fseek(0x%lx) error: %s\n", vpd_offset, strerror(errno));
       retval = 1;
       goto teardown;
     }
@@ -330,13 +458,29 @@ int saveFile(const struct PairContainer *container, const char *filename) {
       goto teardown;
     }
   }
+
+  /* write EPS */
+  fseek(fp, vpd_offset + eps_offset, SEEK_SET);
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
     retval = 1;
     goto teardown;
   }
+
+  /* write SPD */
+  if (spd_data) {
+    fseek(fp, vpd_offset + spd_offset, SEEK_SET);
+    if (fwrite(spd_data, spd_len, 1, fp) != 1) {
+      fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
+      retval = 1;
+      goto teardown;
+    }
+  }
+
+  /* write VPD 2.0 */
+  fseek(fp, vpd_offset + vpd_2_0_offset, SEEK_SET);
   if (fwrite(buf, buf_len, 1, fp) != 1) {
-    fprintf(stderr, "fwrite(VPD) error (%s)\n", strerror(errno));
+    fprintf(stderr, "fwrite(VPD 2.0) error (%s)\n", strerror(errno));
     retval = 1;
     goto teardown;
   }
@@ -362,7 +506,7 @@ static void usage(const char *progname) {
   printf("      -p <pad length>  Pad if length is shorter.\n");
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
-  printf("      -O               Overwrite current VPD partition.\n");
+  printf("      -O               Overwrite and re-format VPD partition.\n");
   printf("\n");
 }
 
@@ -520,6 +664,7 @@ int main(int argc, char *argv[]) {
   }
 
 teardown:
+  if (spd_data) free(spd_data);
   if (filename) free(filename);
   destroyContainer(&file);
   destroyContainer(&argument);
