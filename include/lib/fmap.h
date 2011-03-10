@@ -81,7 +81,13 @@ struct fmap {
 
 /*
  * fmapNormalizeAreaName - to protect malicious attack, this function
- * replace all non-digits and non-alphabet chars into underline.
+ * replace not allowed chars into underline. Only following are allowed:
+ *
+ *   numbers
+ *   digits
+ *   space
+ *
+ * The allowing list should increase if fmap area name allows more chars.
  *
  * @name: point to the name.
  */
