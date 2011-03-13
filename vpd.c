@@ -34,7 +34,12 @@
 /* The buffer length. Right now the VPD partition size on flash is 128KB. */
 #define BUF_LEN (128 * 1024)
 
-static uint8_t flashrom_tmp_file[] = "/tmp/vpd.flashrom.XXXXXX";
+/* temp filename for partial read area. */
+static uint8_t tmp_part_file[] = "/tmp/vpd.flashrom.XXXXXX";
+/* temp filename for the full flash content (actually only partial content
+ * is available). But for flashrom -w to match flash size, we need to keep this
+ * file from flashromRead() to writeFlashrom(). */
+static uint8_t tmp_full_file[] = "/tmp/vpd.flashrom.XXXXXX";
 
 /* 2 containers:
  *   file:      stores decoded pairs from file.
@@ -61,9 +66,11 @@ int max_buf_len = sizeof(buf);
  * User can overwrite this by -E argument.
  */
 uint32_t eps_base = GOOGLE_EPS_BASE;
+int eps_base_force_specified = 0;  /* a bool value to indicate if -E argument
+                                    * is given. */
 
 /* the fmap name of VPD. */
-uint8_t fmap_vpd_area_name[FMAP_STRLEN] = "RO VPD";
+uint8_t fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
 
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFlie(). */
@@ -226,7 +233,7 @@ int loadFile(const char *filename, struct PairContainer *container,
   int retval = 0;
 
   if (!(fp = fopen(filename, "r"))) {
-    fprintf(stderr, "[WARN] File [%s] cannot be opened for read. Ignored.\n",
+    fprintf(stderr, "[WARN] File [%s] cannot be opened for read. It's fine.\n",
             filename);
     return 0;
   }
@@ -258,6 +265,7 @@ int loadFile(const char *filename, struct PairContainer *container,
       goto teardown;
     }
   } else {
+    /* FMAP signature is found, try to search the partition name in table. */
     int i;
 
     fmap = (struct fmap *)&read_buf[sig_offset];
@@ -289,10 +297,27 @@ int loadFile(const char *filename, struct PairContainer *container,
    * eps points to the EPS structure, which is usually equal to vpd_buf. */
   eps_offset = (uint8_t*)eps - vpd_buf;
 
+  /* check if ups_base variable needs to be updated. */
+  if (!eps_base_force_specified) {
+      if (eps->table_address > file_size) {
+        /* If the table address field of EPS indicates the position exceeding
+         * the file size, that means some how this field needs to be shifted.
+         * A special case is 0xFFFFFFFF, which means unkowns address. But this
+         * is okay because the later offset of structure table are counted
+         * related to this value. */
+        eps_base = eps->table_address - sizeof(*eps);
+        fprintf(stderr, "[INFO] we guess eps_base is 0x%x.\n", eps_base);
+      }
+    }
+
   /* jump if the VPD partition is not recognized. */
   if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
     /* But OKAY if the VPD partition is all-FF, which is un-used. */
-    if (memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+    if (!memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+      fprintf(stderr, "[WARN] VPD partition not formatted. It's fine.\n");
+      retval = 0;
+      goto teardown;
+    } else {
       fprintf(stderr, "SMBIOS signature is not matched.\n");
       fprintf(stderr, "You may use -O to overwrite the data.\n");
       retval = 1;
@@ -315,7 +340,8 @@ int loadFile(const char *filename, struct PairContainer *container,
   /* Now header points to the first SMBIOS entry, and data points to the
    * first BBP entry. The first entry could be SPD data. We don't care. */
   if (header->handle != expected_handle) {
-    fprintf(stderr, "The first handle value must be 0, but is %d.\n",
+    fprintf(stderr, "[ERROR] The first handle value must be 0, but is %d.\n"
+                    "        Use -O option to re-format.\n",
                     header->handle);
     retval = 1;
     goto teardown;
@@ -362,7 +388,8 @@ int loadFile(const char *filename, struct PairContainer *container,
 
   /* The 2nd could be VPD 2.0 data or End Of Table. */
   if (header->handle != expected_handle) {
-    fprintf(stderr, "The second handle value must be 1, but is %d.\n",
+    fprintf(stderr, "[ERROR] The second handle value must be 1, but is %d.\n"
+                    "        Use -O option to re-format.\n",
                     header->handle);
     retval = 1;
     goto teardown;
@@ -399,7 +426,7 @@ int loadFile(const char *filename, struct PairContainer *container,
   }
 
   if (header->type != VPD_TYPE_END) {
-    fprintf(stderr, "[WARN] we expect the last one is type 127. Ignored.\n");
+    fprintf(stderr, "[WARN] we expect the last one is type 127. It's fine.\n");
   }
 
 teardown:
@@ -415,7 +442,7 @@ int saveFile(const struct PairContainer *container, const char *filename) {
   int eps_len = 0;
   int retval = 0;
 
-  memset(eps, 0, sizeof(eps));
+  memset(eps, 0xff, sizeof(eps));
 
   /* encode into buffer */
   if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
@@ -490,6 +517,20 @@ teardown:
   return retval;
 }
 
+int myMkTemp(uint8_t *tmp_file) {
+  int fd;
+  fd = mkstemp(tmp_file);
+  if (fd < 0) {
+    fprintf(stderr, "mkstemp(%s) failed\n", tmp_file);
+  }
+  return fd;
+}
+
+int generateTempFilenames(void) {
+  if (myMkTemp(tmp_part_file) < 0) return -1;
+  if (myMkTemp(tmp_full_file) < 0) return -1;
+  return 0;
+}
 
 static void usage(const char *progname) {
   printf("Chrome OS VPD 2.0 utility --\n");
@@ -551,6 +592,7 @@ int main(int argc, char *argv[]) {
       case 'E':
         errno = 0;
         eps_base = strtoul(optarg, (char **) NULL, 0);
+        eps_base_force_specified = 1;
 
         /* FIXME: this is not a stable way to detect error because
          *        implementation may (or may not) assign errno. */
@@ -605,9 +647,14 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  fd = mkstemp(flashrom_tmp_file);
-  if (fd < 0) {
-    fprintf(stderr, "mkstemp(%s) failed\n", flashrom_tmp_file);
+  if (optind < argc) {
+    fprintf(stderr, "[ERROR] unexpected argument: %s\n\n", argv[optind]);
+    usage(argv[0]);
+    retval = 1;
+    goto teardown;
+  }
+
+  if (generateTempFilenames() < 0) {
     retval = 1;
     goto teardown;
   }
@@ -617,13 +664,14 @@ int main(int argc, char *argv[]) {
 
   /* if no filename is specified, call flashrom to read from flash. */
   if (!filename) {
-    if (FLASHROM_OK != flashromRead(flashrom_tmp_file)) {
+    if (FLASHROM_OK != flashromRead(tmp_part_file, tmp_full_file,
+                                    fmap_vpd_area_name)) {
       fprintf(stderr, "flashromRead() error!\n");
       retval = 1;
       goto teardown;
     }
     write_back_to_flash = 1;
-    filename = strdup(flashrom_tmp_file);
+    filename = strdup(tmp_part_file);
   }
 
   if (retval = loadFile(filename, &file, overwrite_it)) {
@@ -655,7 +703,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (write_back_to_flash) {
-      if (FLASHROM_OK != flashromPartialWrite(filename, vpd_offset, vpd_size)) {
+      if (FLASHROM_OK != flashromPartialWrite(filename, tmp_full_file,
+                                              fmap_vpd_area_name)) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
         retval = 1;
         goto teardown;

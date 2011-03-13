@@ -34,10 +34,6 @@
  * So, define a long enough length here. */
 #define CMD_BUF_SIZE (4096)
 
-#define PARTIAL_WRITE_AREA_NAME "pw_name"
-
-static uint8_t layout_filename[] = "/tmp/vpd.layout.XXXXXX";
-
 static uint8_t flashrom_cmd[] = "flashrom";
 
 /* The argument for flashrom.
@@ -46,12 +42,14 @@ static uint8_t flashrom_cmd[] = "flashrom";
  */
 static uint8_t flashrom_arguments[] = " -p internal:bus=spi ";
 
-int flashromRead(const char* tmp_file) {
+int flashromRead(const char* part_file, const char* full_file,
+                 const char* partition_name) {
   char cmd[CMD_BUF_SIZE];
   int ret = 0;
 
-  snprintf(cmd, sizeof(cmd), "%s %s -r '%s' >/dev/null 2>&1",
-           flashrom_cmd, flashrom_arguments, tmp_file);
+  snprintf(cmd, sizeof(cmd), "%s %s -i '%s':'%s' -r '%s' >/dev/null 2>&1",
+           flashrom_cmd, flashrom_arguments,
+           partition_name, part_file, full_file);
   ret = system(cmd);
   if (ret == 0)
     return FLASHROM_OK;
@@ -59,36 +57,17 @@ int flashromRead(const char* tmp_file) {
     return FLASHROM_FAIL;
 }
 
-int flashromPartialWrite(const char* tmp_file,
-                         const off_t section_offset,
-                         const size_t section_size) {
+int flashromPartialWrite(const char* part_file, const char* full_file,
+                         const char* partition_name) {
   int fd;
   char cmd[CMD_BUF_SIZE];
   FILE* fp;
   int ret = 0;
 
-  fd = mkstemp(layout_filename);
-  if (fd < 0) {
-    fprintf(stderr, "mkstemp(%s) failed.\n", layout_filename);
-    return FLASHROM_FAIL;
-  } else {
-    close(fd);
-  }
-
-  /* generate layout file */
-  if (!(fp = fopen(layout_filename, "w"))) {
-    fprintf(stderr, "cannot create layout file: [%s]\n", layout_filename);
-    return FLASHROM_FAIL;
-  }
-  fprintf(fp, "0x%lx:0x%lx %s\n", section_offset,
-                                  section_offset + section_size - 1,
-                                  PARTIAL_WRITE_AREA_NAME);
-  fclose(fp);
-
   /* write it back */
-  snprintf(cmd, sizeof(cmd), "%s %s -l %s -i '%s' -w '%s' >/tmp/null 2>&1",
-           flashrom_cmd, flashrom_arguments, layout_filename,
-           PARTIAL_WRITE_AREA_NAME, tmp_file);
+  snprintf(cmd, sizeof(cmd), "%s %s -i '%s':'%s' -w '%s' >/tmp/null 2>&1",
+           flashrom_cmd, flashrom_arguments,
+           partition_name, part_file, full_file);
   ret = system(cmd);
 
   if (ret == 0)

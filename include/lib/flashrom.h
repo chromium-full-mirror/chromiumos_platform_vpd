@@ -33,10 +33,10 @@ enum {
   FLASHROM_FAIL,
 };
 
-int flashromRead(const char* tmp_file);
+int flashromRead(const char* part_file, const char* full_file,
+                 const char* partition_name);
 
-int flashromPartialWrite(const char* tmp_file,
-                         const off_t section_offset,
-                         const size_t section_size);
+int flashromPartialWrite(const char* part_file, const char* full_file,
+                         const char* partition_name);
 
 #endif /* __LIB_FLASHROM_H__ */
