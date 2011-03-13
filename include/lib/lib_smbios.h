@@ -22,6 +22,7 @@
 #define __LIB_LIB_SMBIOS__
 
 #include <inttypes.h>
+#include "lib/vpd_tables.h"
 
 struct vpd_entry *vpd_create_eps(unsigned short structure_table_len,
                                  unsigned short num_structures,
@@ -30,6 +31,7 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
                        size_t len, const char *uuid, uint32_t offset,
                        uint32_t size, const char *vendor,
                        const char *desc, const char *variant);
+int vpd_type241_size(struct vpd_header *header);
 int vpd_append_type127(uint16_t handle,
                        uint8_t **buf, size_t len);
 

@@ -209,14 +209,14 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
   }
 
   if (desc) {
-    data->description = 2;
+    data->description = string_index;
     string_index++;
     sprintf(string_ptr, "%s%c", desc, '\0');
     string_ptr += strlen(desc) + 1;
   }
 
-  data->major_version = 0;
-  data->minor_version = 1;
+  data->major_version = 2;
+  data->minor_version = 0;
 
   if (variant) {
     data->variant = string_index;
@@ -239,6 +239,37 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
 
 vpd_create_type241_fail:
   return -1;
+}
+
+/**
+ * vpd_type241_size - return the size of type 241 structure table.
+ *
+ * Type 241 structure contains 3 variant length of string at end of table.
+ * It is non-trival to get the length by sizeof(vpd_table_binary_blob_pointer).
+ * This function can help by adding 3 strlen(NULL-terminated string).
+ *
+ * @header:  pointer to the start address of this structure table.
+ *
+ * returns total size of this structure table.
+ * returns <0 to indicate failure
+ */
+int vpd_type241_size(struct vpd_header *header) {
+  uint8_t *ptr = ((uint8_t*)header) + header->length;
+  int length = sizeof(struct vpd_header) +
+               sizeof(struct vpd_table_binary_blob_pointer);
+  int i;
+
+  /* Sanity check */
+  if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) return -1;
+
+  for (i = 0; i < 3; ++i) {
+    int len = strlen(ptr) + 1;
+    length += len;
+    ptr += len;
+  }
+  length++;  /* Additional null(0) to indicate end of set.
+              * Refer to SMBIOS spec 3.1.3 Text Strings. */
+  return length;
 }
 
 void vpd_free_table(void *data)

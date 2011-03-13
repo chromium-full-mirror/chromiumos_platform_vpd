@@ -102,16 +102,4 @@ struct vpd_table_binary_blob_pointer {
 #define VPD_MAX_STRINGS 10
 #define VPD_MAX_STRING_LENGTH 64
 
-/* One structure to rule them all */
-struct vpd_table {
-  struct vpd_header header;
-  union {
-    struct vpd_table_firmware firmware;
-    struct vpd_table_system system;
-    struct vpd_table_binary_blob_pointer blob;
-    uint8_t data[1024];
-  } data;
-  char string[VPD_MAX_STRINGS][VPD_MAX_STRING_LENGTH];
-};
-
 #endif /* __LIB_VPD_TABLES_H__ */
