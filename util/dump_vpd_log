@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# Helper function to dump VPD RO/RW content into /var/log/vpd_2.0.txt
+#
+# Used in:
+#  + OOBE reads this log file for the default locale setting.
+#  + chrome://system reads this log file.
+#
+TMP="/tmp/vpd_2.0.txt"
+VPD_2_0="/var/log/vpd_2.0.txt"
+
+if [ "$1" = "--force" ]; then
+  force=1
+else
+  force=0
+fi
+
+# Since we don't change the VPD data too often, only create the log file
+# if it does not exist.
+if [ ! -f $VPD_2_0 -o $force -eq 1 ]; then
+  rm -f $TMP
+  (vpd -i "RO_VPD" -l || echo "RO VPD execute error.") >> $TMP
+  (vpd -i "RW_VPD" -l || echo "RW VPD execute error.") >> $TMP
+  chmod go-stwx $TMP
+  mv -f $TMP $VPD_2_0
+fi
+
