@@ -565,6 +565,7 @@ int main(int argc, char *argv[]) {
     {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
     {"overwrite", 0, 0, 'O'},
+    {0, 0, 0, 0}
   };
   char *filename = NULL;
   int write_back_to_flash = 0;
