@@ -284,6 +284,7 @@ void setString(struct PairContainer *container,
   } else {
     struct StringPair *new_pair = malloc(sizeof(struct StringPair));
     assert(new_pair);
+    memset(new_pair, 0, sizeof(struct StringPair));
 
     fillStringPair(new_pair, key, value, pad_len);
 
@@ -329,6 +330,27 @@ int encodeContainer(const struct PairContainer *container,
   return VPD_OK;
 }
 
+int setContainerFilter(struct PairContainer *container,
+                       const uint8_t *filter) {
+  struct StringPair *str;
+
+  for (str = container->first; str; str = str->next) {
+    if (filter) {
+      /*
+       * TODO(yjlou):
+       * Now, we treat the inputing filter string as plain string.
+       * Will support regular expression syntax in future if needed.
+       */
+      if (strcmp(str->key, filter)) {
+        str->filter_out = 1;
+      }
+    } else {
+      str->filter_out = 0;
+    }
+  }
+  return VPD_OK;
+}
+
 /* Export the container content with human-readable text. */
 int exportContainer(const int export_type,
                     const struct PairContainer *container,
@@ -344,6 +366,9 @@ int exportContainer(const int export_type,
   for (str = container->first; str; str = str->next) {
     int copy_len;
 
+    if (str->filter_out)
+      continue;
+
     if (export_type == VPD_EXPORT_AS_PARAMETER) {
       char pad_str[32];
       int pad_len;
@@ -355,26 +380,28 @@ int exportContainer(const int export_type,
       index += pad_len;
     }
 
-    /* double quote */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '"';
+    if (export_type != VPD_EXPORT_VALUE) {
+      /* double quote */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '"';
 
-    /* output key */
-    if ((index + strlen(str->key)) > max_buf_len) return VPD_FAIL;
-    strcpy(&buf[index], str->key);
-    index += strlen(str->key);
+      /* output key */
+      if ((index + strlen(str->key)) > max_buf_len) return VPD_FAIL;
+      strcpy(&buf[index], str->key);
+      index += strlen(str->key);
 
-    /* double quote */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '"';
+      /* double quote */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '"';
 
-    /* equal sign */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '=';
+      /* equal sign */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '=';
 
-    /* double quote */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '"';
+      /* double quote */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '"';
+    }
 
     /* output value */
     if (str->pad_len != VPD_AS_LONG_AS)
@@ -385,13 +412,15 @@ int exportContainer(const int export_type,
     memcpy(&buf[index], str->value, copy_len);
     index += copy_len;
 
-    /* double quote */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '"';
+    if (export_type != VPD_EXPORT_VALUE) {
+      /* double quote */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '"';
 
-    /* new line */
-    if ((index + 1 > max_buf_len)) return VPD_FAIL;
-    buf[index++] = '\n';
+      /* new line */
+      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      buf[index++] = '\n';
+    }
   }
 
   /* null terminator */

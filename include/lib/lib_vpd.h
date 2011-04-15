@@ -37,8 +37,9 @@ enum {
   VPD_AS_LONG_AS = -1,
 };
 
-enum {
+enum {  /* export_type */
   VPD_EXPORT_KEY_VALUE = 1,
+  VPD_EXPORT_VALUE,
   VPD_EXPORT_AS_PARAMETER,
 };
 
@@ -47,6 +48,7 @@ struct StringPair {
   unsigned char *key;
   unsigned char *value;
   int pad_len;
+  int filter_out;  /* TRUE means not exported. */
   struct StringPair *next;
 };
 
@@ -171,6 +173,12 @@ int encodeContainer(const struct PairContainer *container,
                     const int max_buf_len,
                     unsigned char *buf,
                     int *generated);
+
+/* Set filter for exporting functions.
+ * If filter is NULL, resets the filter so that everything can be exported.
+ */
+int setContainerFilter(struct PairContainer *container,
+                       const uint8_t *filter);
 
 /*
  * Export the container content with human-readable text.

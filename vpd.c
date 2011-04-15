@@ -548,6 +548,7 @@ static void usage(const char *progname) {
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
   printf("      -O               Overwrite and re-format VPD partition.\n");
+  printf("      -g <key>         Print value string only.\n");
   printf("\n");
 }
 
@@ -555,7 +556,7 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   int retval = 0;
-  const char *optstring = "hf:E:s:p:i:lO";
+  const char *optstring = "hf:E:s:p:i:lOg:";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
@@ -565,9 +566,11 @@ int main(int argc, char *argv[]) {
     {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
     {"overwrite", 0, 0, 'O'},
+    {"filter", 0, 0, 'g'},
     {0, 0, 0, 0}
   };
   char *filename = NULL;
+  char *filter_str = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
@@ -640,8 +643,12 @@ int main(int argc, char *argv[]) {
                         * no new pair is given. */
         break;
 
+      case 'g':
+        filter_str = strdup(optarg);
+        break;
+
       default:
-        fprintf(stderr, "Invalid option, use --help for usage.\n");
+        fprintf(stderr, "Invalid option (%s), use --help for usage.\n", optarg);
         retval = 1;
         goto teardown;
         break;
@@ -656,6 +663,13 @@ int main(int argc, char *argv[]) {
   }
 
   if (generateTempFilenames() < 0) {
+    fprintf(stderr, "[ERROR] generateTempFilenames() returns failed.\n");
+    retval = 1;
+    goto teardown;
+  }
+
+  if (list_it && filter_str) {
+    fprintf(stderr, "[ERROR] -l and -g must be mutually exclusive.\n");
     retval = 1;
     goto teardown;
   }
@@ -682,14 +696,16 @@ int main(int argc, char *argv[]) {
 
   mergeContainer(&file, &argument);
 
-  if (list_it) {
+  if (list_it || filter_str) {
     /* Reserve larger size because the exporting generates longer string than
      * the encoded data. */
     uint8_t list_buf[BUF_LEN * 2];
     int list_len = 0;
 
-    if (VPD_OK != exportContainer(VPD_EXPORT_KEY_VALUE, &file,
-                                  sizeof(list_buf), list_buf, &list_len)) {
+    if (filter_str) setContainerFilter(&file, filter_str);
+    if (VPD_OK != exportContainer(
+          (filter_str) ? VPD_EXPORT_VALUE : VPD_EXPORT_KEY_VALUE,
+          &file, sizeof(list_buf), list_buf, &list_len)) {
       fprintf(stderr, "exportContainer(): Cannot generate string.\n");
       retval = 1;
       goto teardown;
@@ -716,6 +732,7 @@ int main(int argc, char *argv[]) {
 teardown:
   if (spd_data) free(spd_data);
   if (filename) free(filename);
+  if (filter_str) free(filter_str);
   destroyContainer(&file);
   destroyContainer(&argument);
 
