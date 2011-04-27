@@ -6,7 +6,7 @@
 #  + OOBE reads this log file for the default locale setting.
 #  + chrome://system reads this log file.
 #
-TMP="/tmp/vpd_2.0.txt"
+TMP=$(mktemp)
 VPD_2_0="/var/log/vpd_2.0.txt"
 
 if [ "$1" = "--force" ]; then
