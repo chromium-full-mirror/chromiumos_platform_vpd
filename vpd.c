@@ -85,11 +85,11 @@ int found_vpd = 0;
  *
  * For those offset values below, ABSENT means not presented in buffer.
  */
-off_t vpd_offset = 0, vpd_size;  /* The whole partition */
+uint32_t vpd_offset = 0, vpd_size;  /* The whole partition */
 /* Below offset are related to vpd_offset and assume positive.
  * Those are used in saveFile() to write back data. */
-off_t eps_offset = 0;  /* EPS's starting address. Tables[] is following. */
-off_t spd_offset = GOOGLE_SPD_OFFSET;  /* SPD address .*/
+uint32_t eps_offset = 0;  /* EPS's starting address. Tables[] is following. */
+uint32_t spd_offset = GOOGLE_SPD_OFFSET;  /* SPD address .*/
 off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
 
 /* This points to the SPD data if it is availiable when loadFile().
@@ -215,10 +215,64 @@ error:
 }
 
 
+/*
+ *  The SMBIOS requires the offset in type 241 table is absolute address.
+ *  We get in trouble if only VPD partition is read from BIOS (for speed)
+ *  because we have no overview scope to know the absolute address in BIOS.
+ *
+ *  The below table shows the conditions we do/don't know the actual table
+ *  address. Case A&B are determined. We need to make assumption in case C&D.
+ *
+ *  \                 |                |
+ *   \ table made by  | vpd -f         | vpd (via flashrom
+ *    \____________   |                | partial read/write)
+ *  how it is      \  | data->offset = | data->offset =
+ *  read this time  \ |   0x1f0600     |   0x5ff
+ * -------------------+----------------+----------------------
+ *  we have full image| data->offset - | data->offset -
+ *    eps_base =      |   eps_base     |   GOOGLE_EPS_BASE
+ *      0x1f0000      |     = 0x600 (A)|     = 0x600      (B)
+ * -------------------+----------------+----------------------
+ *  got partial image | we assume EPS  | data->offset -
+ *    eps_base =      | starts at 64KB |   GOOGLE_EPS_BASE
+ *     GOOGLE_EPS_BASE| boundary.   (C)|     = 0x600      (D)
+ *                    |                |
+ *
+ *  Note that: GOOGLE_EPS_BASE is -1 (0xFFFFFFFF).
+ *             eps_base 0x1f0xxx is just example. Real value is saved in fmap.
+ */
+static uint32_t guess_offset(uint32_t data_offset, uint32_t eps_base) {
+  if (eps_base != GOOGLE_EPS_BASE) {
+    if (data_offset > eps_base) {
+      /* case A */
+      return data_offset - eps_base;
+    } else {
+      /* case B */
+      return data_offset - GOOGLE_EPS_BASE;
+    }
+  } else {
+    const uint32_t assumed_partition_size = 1 << 16;  /* 64KB */
+    const uint32_t table_alignment = 0x100;  /* 256B */
+    uint32_t offset;
+
+    if (!(data_offset & (table_alignment - 1))) {
+      /* case C */
+      offset = data_offset & (assumed_partition_size - 1);
+      fprintf(stderr, "[WARN] case C, guess table offset 0x%0x.\n", offset);
+    } else {
+      /* case D */
+      offset = data_offset - GOOGLE_EPS_BASE;
+      fprintf(stderr, "[WARN] case D, guess table offset 0x%0x.\n", offset);
+    }
+    return offset;
+  }
+}
+
+
 int loadFile(const char *filename, struct PairContainer *container,
              int overwrite_it) {
   FILE *fp;
-  int file_size;
+  uint32_t file_size;
   uint8_t *read_buf;
   off_t sig_offset;
   struct fmap *fmap;
@@ -356,7 +410,7 @@ int loadFile(const char *filename, struct PairContainer *container,
   uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
   if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
     ++expected_handle;
-    spd_offset = data->offset - eps_base;
+    spd_offset = guess_offset(data->offset, eps_base);
     spd_len = data->size;
     if (vpd_offset + spd_offset + spd_len >= file_size) {
       fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
@@ -400,7 +454,7 @@ int loadFile(const char *filename, struct PairContainer *container,
     ++expected_handle;
 
     /* iterate all pairs */
-    for (index = data->offset - eps_base;  /* skip the EPS */
+    for (index = guess_offset(data->offset, eps_base);  /* skip the EPS */
          vpd_buf[index] != VPD_TYPE_TERMINATOR &&
          vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
       if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
