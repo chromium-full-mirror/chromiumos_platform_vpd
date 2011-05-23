@@ -65,7 +65,8 @@ int max_buf_len = sizeof(buf);
  *
  * User can overwrite this by -E argument.
  */
-uint32_t eps_base = GOOGLE_EPS_BASE;
+#define UNKNOWN_EPS_BASE ((uint32_t)-1)
+uint32_t eps_base = UNKNOWN_EPS_BASE;
 int eps_base_force_specified = 0;  /* a bool value to indicate if -E argument
                                     * is given. */
 
@@ -83,7 +84,6 @@ int found_vpd = 0;
  *   SPD
  *   VPD 2.0 data
  *
- * For those offset values below, ABSENT means not presented in buffer.
  */
 uint32_t vpd_offset = 0, vpd_size;  /* The whole partition */
 /* Below offset are related to vpd_offset and assume positive.
@@ -98,15 +98,15 @@ off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
 uint8_t *spd_data = NULL;
 int32_t spd_len = 256;  /* max value for DDR3 */
 
-/* for debug purpose */
-void dumpBuf() {
-  int i;
-  for(i = 0; i < buf_len; ++i) {
-    printf("%02x ", buf[i]);
-    if ((i % 16) == 15) printf("\n");
-  }
-}
 
+int myMkTemp(uint8_t *tmp_file) {
+  int fd;
+  fd = mkstemp(tmp_file);
+  if (fd < 0) {
+    fprintf(stderr, "mkstemp(%s) failed\n", tmp_file);
+  }
+  return fd;
+}
 
 /*  Given the offset of blob block (related to the first byte of EPS) and
  *  the size of blob, the is function generates an SMBIOS ESP.
@@ -124,6 +124,7 @@ int buildEpsAndTables(
 
   assert(buf);
   assert(generated);
+  assert(eps_base != UNKNOWN_EPS_BASE);
 
   buf += *generated;
 
@@ -215,69 +216,140 @@ error:
 }
 
 
-/*
- *  The SMBIOS requires the offset in type 241 table is absolute address.
- *  We get in trouble if only VPD partition is read from BIOS (for speed)
- *  because we have no overview scope to know the absolute address in BIOS.
- *
- *  The below table shows the conditions we do/don't know the actual table
- *  address. Case A&B are determined. We need to make assumption in case C&D.
- *
- *  \                 |                |
- *   \ table made by  | vpd -f         | vpd (via flashrom
- *    \____________   |                | partial read/write)
- *  how it is      \  | data->offset = | data->offset =
- *  read this time  \ |   0x1f0600     |   0x5ff
- * -------------------+----------------+----------------------
- *  we have full image| data->offset - | data->offset -
- *    eps_base =      |   eps_base     |   GOOGLE_EPS_BASE
- *      0x1f0000      |     = 0x600 (A)|     = 0x600      (B)
- * -------------------+----------------+----------------------
- *  got partial image | we assume EPS  | data->offset -
- *    eps_base =      | starts at 64KB |   GOOGLE_EPS_BASE
- *     GOOGLE_EPS_BASE| boundary.   (C)|     = 0x600      (D)
- *                    |                |
- *
- *  Note that: GOOGLE_EPS_BASE is -1 (0xFFFFFFFF).
- *             eps_base 0x1f0xxx is just example. Real value is saved in fmap.
- */
-static uint32_t guess_offset(uint32_t data_offset, uint32_t eps_base) {
-  if (eps_base != GOOGLE_EPS_BASE) {
-    if (data_offset > eps_base) {
-      /* case A */
-      return data_offset - eps_base;
-    } else {
-      /* case B */
-      return data_offset - GOOGLE_EPS_BASE;
-    }
-  } else {
-    const uint32_t assumed_partition_size = 1 << 16;  /* 64KB */
-    const uint32_t table_alignment = 0x100;  /* 256B */
-    uint32_t offset;
+/* Given an address, compare if it is SMBIOS signature ("_SM_"). */
+int isEps(const void* ptr) {
+  return !memcmp(VPD_ENTRY_MAGIC, ptr, sizeof(VPD_ENTRY_MAGIC) - 1);
+  /* TODO(yjlou): need more EPS sanity checks here. */
+}
 
-    if (!(data_offset & (table_alignment - 1))) {
-      /* case C */
-      offset = data_offset & (assumed_partition_size - 1);
-      fprintf(stderr, "[WARN] case C, guess table offset 0x%0x.\n", offset);
-    } else {
-      /* case D */
-      offset = data_offset - GOOGLE_EPS_BASE;
-      fprintf(stderr, "[WARN] case D, guess table offset 0x%0x.\n", offset);
+
+/* There are two possible file content appearng here:
+ *   1. a full and complete BIOS file
+ *   2. a full but only VPD partition area is valid. (no fmap)
+ *   3. a full BIOS, but VPD partition is blank.
+ *
+ * The first case is easy. Just lookup the fmap and find out the VPD partition.
+ * The second is harder. We try to search the SMBIOS signature (since others
+ * are blank). For the third, we just return and leave caller to read full
+ * content, including fmap info.
+ *
+ * If found, vpd_offset and vpd_size are updated.
+ */
+int findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
+                     uint32_t* vpd_offset, uint32_t* vpd_size) {
+  off_t sig_offset;
+  struct fmap *fmap;
+  int i;
+
+  assert(read_buf);
+  assert(vpd_offset);
+  assert(vpd_size);
+
+  /* scan the file and find out the VPD partition. */
+  sig_offset = fmapFind(read_buf, file_size);
+  if (-1 != sig_offset) {
+    /* FMAP signature is found, try to search the partition name in table. */
+    fmap = (struct fmap *)&read_buf[sig_offset];
+    for(i = 0; i < fmap->nareas; i++) {
+      fmapNormalizeAreaName(fmap->areas[i].name);
     }
-    return offset;
+
+    if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
+                               vpd_offset, vpd_size)) {
+      found_vpd = 1;  /* Mark found here then saveFile() knows where to
+                       * write back (vpd_offset, vpd_size). */
+      return 0;
+    } else {
+      fprintf(stderr, "[ERROR] The VPD partition [%s] is not found.\n",
+              fmap_vpd_area_name);
+      return 1;
+    }
   }
+
+  /* The signature must be aligned to 16-byte. */
+  for (i = 0; i < file_size; i += 16) {
+    if (isEps(&read_buf[i])) {
+      found_vpd = 1;  /* Mark found here then saveFile() knows where to
+                       * write back (vpd_offset, vpd_size). */
+      *vpd_offset = i;
+      /* FIXME: We don't know the VPD partition size in this case.
+       *        However, return 4K should be safe enough now.
+       *        In the long term, this code block will be obscured. */
+      *vpd_size = 4096;
+      return 0;
+    }
+  }
+  return 1;
+}
+
+
+/* Load file content into memory.
+ * Returns: NULL if file opens error or read error.
+ *          Others, pointer to the memory. The filesize is also returned.
+ *
+ * Note: it's caller's responsbility to free the memory.
+ */
+uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
+  FILE *fp;
+  uint8_t *read_buf;
+
+  assert(filename);
+  assert(filesize);
+
+  if (!(fp = fopen(filename, "r"))) {
+    return NULL;
+  }
+  /* get file size */
+  fseek(fp, 0, SEEK_END);
+  *filesize = ftell(fp);
+
+  /* read file content */
+  fseek(fp, 0, SEEK_SET);
+  read_buf = malloc(*filesize);
+  assert(read_buf);
+  if (*filesize != fread(read_buf, 1, *filesize, fp)) {
+    fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
+    return NULL;
+  }
+  fclose(fp);
+
+  return read_buf;
+}
+
+
+int getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
+  uint8_t filename[] = "/tmp/vpd.flashrom.XXXXXX";
+  uint8_t *buf;
+  uint32_t buf_size;
+  int retval;
+
+  if (myMkTemp(filename) < 0) {
+    return 1;
+  }
+
+  if (FLASHROM_OK != flashromFullRead(filename)) {
+    fprintf(stderr, "[WARN] Cannot read full BIOS.\n");
+    return 1;
+  }
+  assert(buf = readFileContent(filename, &buf_size));
+  if (findVpdPartition(buf, buf_size, offset, size)) {
+    fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
+    retval = 1;
+  } else {
+    retval = 0;
+  }
+  free(buf);
+  return retval;
 }
 
 
 int loadFile(const char *filename, struct PairContainer *container,
              int overwrite_it) {
-  FILE *fp;
   uint32_t file_size;
   uint8_t *read_buf;
-  off_t sig_offset;
-  struct fmap *fmap;
   uint8_t *vpd_buf;
   struct vpd_entry *eps;
+  uint32_t related_eps_base;
   struct vpd_header *header;
   struct vpd_table_binary_blob_pointer *data;
   uint8_t spd_uuid[16], vpd_2_0_uuid[16];
@@ -286,88 +358,76 @@ int loadFile(const char *filename, struct PairContainer *container,
   int index;
   int retval = 0;
 
-  if (!(fp = fopen(filename, "r"))) {
-    fprintf(stderr, "[WARN] File [%s] cannot be opened for read. It's fine.\n",
-            filename);
+  if (!(read_buf = readFileContent(filename, &file_size))) {
+    fprintf(stderr, "[WARN] Cannot LoadFile('%s'), that's fine.\n", filename);
     return 0;
   }
-  /* get file size */
-  fseek(fp, 0, SEEK_END);
-  file_size = ftell(fp);
 
-  /* read file content */
-  fseek(fp, 0, SEEK_SET);
-  read_buf = malloc(file_size);
-  assert(read_buf);
-  if (file_size != fread(read_buf, 1, file_size, fp)) {
-    fprintf(stderr, "Reading file [%s] failed.\n", filename);
+  if (0 == findVpdPartition(read_buf, file_size, &vpd_offset, &vpd_size)) {
+    if (!eps_base_force_specified) {
+      eps_base = vpd_offset;
+    }
+  } else {
+    /* We cannot parse out the VPD partition address from given file.
+     * Then, try to read the whole BIOS chip. */
+    uint32_t offset, size;
+    if (!eps_base_force_specified) {
+      if (0 == getVpdPartitionFromFullBios(&offset, &size)) {
+        eps_base = offset;
+        vpd_size = size;
+      } else {
+        if (overwrite_it) {
+          retval = 0;
+        } else {
+          fprintf(stderr, "[ERROR] getVpdPartitionFromFullBios() failed.");
+          retval = 1;
+        }
+        goto teardown;
+      }
+    }
+  }
+
+  /* Update the following variables:
+   *   eps_base: integer, the VPD EPS address in ROM.
+   *   vpd_offset: integer, the VPD partition offset in file (read_buf[]).
+   *   vpd_buf: uint8_t*, points to the VPD partition.
+   *   eps: vpd_entry*, points to the EPS structure.
+   *   eps_offset: integer, the offset of EPS related to vpd_buf[].
+   */
+  vpd_buf = &read_buf[vpd_offset];
+  /* eps and eps_offset will be set slightly later. */
+
+  if (eps_base == UNKNOWN_EPS_BASE) {
+    fprintf(stderr, "[ERROR] Cannot determine eps_base. Cannot go on.\n"
+                    "        You may use -E to specify the value.\n");
     retval = 1;
     goto teardown;
   }
-  fclose(fp);
 
-  /* scan the file and find out the VPD partition. */
-  sig_offset = fmapFind(read_buf, file_size);
-  if (-1 == sig_offset) {
-    /* FMAP signature is not found, assume it is pure VPD partition. */
-    vpd_buf = read_buf;
-    eps = (struct vpd_entry *)vpd_buf;
+  /* In overwrite mode, we don't care the content inside. Stop parsing. */
+  if (overwrite_it) {
+    retval = 0;
+    goto teardown;
+  }
 
-    /* In overwrite mode, ignore all existing data. */
-    if (overwrite_it) {
-      retval = 0;
-      goto teardown;
-    }
-  } else {
-    /* FMAP signature is found, try to search the partition name in table. */
-    int i;
-
-    fmap = (struct fmap *)&read_buf[sig_offset];
-    for(i = 0; i < fmap->nareas; i++) {
-      fmapNormalizeAreaName(fmap->areas[i].name);
-    }
-
-    if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
-                               &vpd_offset, &vpd_size)) {
-      found_vpd = 1;  /* Mark found here then saveFile() knows where to
-                       * write back (vpd_offset, vpd_size). */
-      eps_base = vpd_offset;
-      vpd_buf = &read_buf[vpd_offset];
-      eps = (struct vpd_entry *)vpd_buf;
-
-      /* In overwrite mode, the VPD content is erased before reading. */
-      if (overwrite_it) {
-        retval = 0;
-        goto teardown;
-      }
-    } else {
-      fprintf(stderr, "The VPD partition [%s] is not found.\n",
-              fmap_vpd_area_name);
-      retval = 1;
-      goto teardown;
+  if (vpd_size < sizeof(struct vpd_entry)) {
+    fprintf(stderr, "[ERROR] vpd_size:%d is too small to be compared.\n",
+            vpd_size);
+    retval = 1;
+    goto teardown;
+  }
+  /* try to search the EPS if it is not aligned to the begin of partition. */
+  for (index = 0; index < vpd_size; index += 16) {
+    if (isEps(&vpd_buf[index])) {
+      eps = (struct vpd_entry *)&vpd_buf[index];
+      eps_offset = index;
+      break;
     }
   }
-  /* Now, vpd_buf points to the VPD partition in buffer.
-   * eps points to the EPS structure, which is usually equal to vpd_buf. */
-  eps_offset = (uint8_t*)eps - vpd_buf;
-
-  /* check if ups_base variable needs to be updated. */
-  if (!eps_base_force_specified) {
-      if (eps->table_address > file_size) {
-        /* If the table address field of EPS indicates the position exceeding
-         * the file size, that means some how this field needs to be shifted.
-         * A special case is 0xFFFFFFFF, which means unkowns address. But this
-         * is okay because the later offset of structure table are counted
-         * related to this value. */
-        eps_base = eps->table_address - sizeof(*eps);
-        fprintf(stderr, "[INFO] we guess eps_base is 0x%x.\n", eps_base);
-      }
-    }
-
   /* jump if the VPD partition is not recognized. */
-  if (memcmp(VPD_ENTRY_MAGIC, eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
-    /* But OKAY if the VPD partition is all-FF, which is un-used. */
-    if (!memcmp("\xff\xff\xff\xff", eps, sizeof(VPD_ENTRY_MAGIC) - 1)) {
+  if (index >= vpd_size) {
+    /* But OKAY if the VPD partition starts with FF, which might be un-used. */
+    if (!memcmp("\xff\xff\xff\xff", vpd_buf, sizeof(VPD_ENTRY_MAGIC) - 1)) {
       fprintf(stderr, "[WARN] VPD partition not formatted. It's fine.\n");
       retval = 0;
       goto teardown;
@@ -377,8 +437,15 @@ int loadFile(const char *filename, struct PairContainer *container,
       retval = 1;
       goto teardown;
     }
-    /* TODO(yjlou): need more EPS sanity checks here. */
   }
+
+  /* adjust the eps_base for data->offset field below. */
+  if (!eps_base_force_specified) {
+    related_eps_base = eps->table_address - sizeof(*eps);
+  } else {
+    related_eps_base = eps_base;
+  }
+
   /* EPS is done above. Parse structure tables below. */
   /* Get the first type 241 blob, at the tail of EPS. */
   header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
@@ -410,7 +477,7 @@ int loadFile(const char *filename, struct PairContainer *container,
   uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
   if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
     ++expected_handle;
-    spd_offset = guess_offset(data->offset, eps_base);
+    spd_offset = data->offset - related_eps_base;
     spd_len = data->size;
     if (vpd_offset + spd_offset + spd_len >= file_size) {
       fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
@@ -454,7 +521,7 @@ int loadFile(const char *filename, struct PairContainer *container,
     ++expected_handle;
 
     /* iterate all pairs */
-    for (index = guess_offset(data->offset, eps_base);  /* skip the EPS */
+    for (index = data->offset - related_eps_base;  /* skip the EPS */
          vpd_buf[index] != VPD_TYPE_TERMINATOR &&
          vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
       if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
@@ -490,11 +557,13 @@ teardown:
 }
 
 
-int saveFile(const struct PairContainer *container, const char *filename) {
+int saveFile(const struct PairContainer *container, const char *filename,
+             int write_back_to_flash) {
   FILE *fp;
   unsigned char eps[1024];
   int eps_len = 0;
   int retval = 0;
+  uint32_t file_seek;
 
   memset(eps, 0xff, sizeof(eps));
 
@@ -540,8 +609,14 @@ int saveFile(const struct PairContainer *container, const char *filename) {
     }
   }
 
+  if (write_back_to_flash) {
+    file_seek = 0;
+  } else {
+    file_seek = vpd_offset;
+  }
+
   /* write EPS */
-  fseek(fp, vpd_offset + eps_offset, SEEK_SET);
+  fseek(fp, file_seek + eps_offset, SEEK_SET);
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
     retval = 1;
@@ -550,7 +625,7 @@ int saveFile(const struct PairContainer *container, const char *filename) {
 
   /* write SPD */
   if (spd_data) {
-    fseek(fp, vpd_offset + spd_offset, SEEK_SET);
+    fseek(fp, file_seek + spd_offset, SEEK_SET);
     if (fwrite(spd_data, spd_len, 1, fp) != 1) {
       fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
       retval = 1;
@@ -559,7 +634,7 @@ int saveFile(const struct PairContainer *container, const char *filename) {
   }
 
   /* write VPD 2.0 */
-  fseek(fp, vpd_offset + vpd_2_0_offset, SEEK_SET);
+  fseek(fp, file_seek + vpd_2_0_offset, SEEK_SET);
   if (fwrite(buf, buf_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(VPD 2.0) error (%s)\n", strerror(errno));
     retval = 1;
@@ -569,15 +644,6 @@ int saveFile(const struct PairContainer *container, const char *filename) {
 
 teardown:
   return retval;
-}
-
-int myMkTemp(uint8_t *tmp_file) {
-  int fd;
-  fd = mkstemp(tmp_file);
-  if (fd < 0) {
-    fprintf(stderr, "mkstemp(%s) failed\n", tmp_file);
-  }
-  return fd;
 }
 
 int generateTempFilenames(void) {
@@ -624,6 +690,8 @@ int main(int argc, char *argv[]) {
     {0, 0, 0, 0}
   };
   char *filename = NULL;
+  char *load_file = NULL;
+  char *save_file = NULL;
   char *filter_str = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
@@ -733,18 +801,23 @@ int main(int argc, char *argv[]) {
 
   /* if no filename is specified, call flashrom to read from flash. */
   if (!filename) {
-    if (FLASHROM_OK != flashromRead(tmp_part_file, tmp_full_file,
-                                    fmap_vpd_area_name)) {
-      fprintf(stderr, "flashromRead() error!\n");
+    if (FLASHROM_OK != flashromPartialRead(tmp_part_file, tmp_full_file,
+                                           fmap_vpd_area_name)) {
+      fprintf(stderr, "flashromPartialRead() error!\n");
       retval = 1;
       goto teardown;
     }
+
     write_back_to_flash = 1;
-    filename = strdup(tmp_part_file);
+    load_file = tmp_full_file;
+    save_file = tmp_part_file;
+  } else {
+    load_file = filename;
+    save_file = filename;
   }
 
-  if (retval = loadFile(filename, &file, overwrite_it)) {
-    fprintf(stderr, "loadFile('%s') error.\n", filename);
+  if (retval = loadFile(load_file, &file, overwrite_it)) {
+    fprintf(stderr, "loadFile('%s') error.\n", load_file);
     goto teardown;
   }
 
@@ -768,13 +841,13 @@ int main(int argc, char *argv[]) {
   }
 
   if (modified) {
-    if (retval = saveFile(&file, filename)) {
+    if (retval = saveFile(&file, save_file, write_back_to_flash)) {
       fprintf(stderr, "saveFile('%s') error.\n", filename);
       goto teardown;
     }
 
     if (write_back_to_flash) {
-      if (FLASHROM_OK != flashromPartialWrite(filename, tmp_full_file,
+      if (FLASHROM_OK != flashromPartialWrite(save_file, tmp_full_file,
                                               fmap_vpd_area_name)) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
         retval = 1;
