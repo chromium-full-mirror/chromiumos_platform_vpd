@@ -42,12 +42,26 @@ static uint8_t flashrom_cmd[] = "flashrom";
  */
 static uint8_t flashrom_arguments[] = " -p internal:bus=spi ";
 
-int flashromRead(const char* part_file, const char* full_file,
-                 const char* partition_name) {
+int flashromFullRead(const char* full_file) {
   char cmd[CMD_BUF_SIZE];
   int ret = 0;
 
-  snprintf(cmd, sizeof(cmd), "%s %s -i '%s':'%s' -r '%s' >/dev/null 2>&1",
+  snprintf(cmd, sizeof(cmd), "%s %s -r '%s' >/dev/null 2>&1",
+           flashrom_cmd, flashrom_arguments, full_file);
+  ret = system(cmd);
+  if (ret == 0)
+    return FLASHROM_OK;
+  else
+    return FLASHROM_FAIL;
+}
+
+int flashromPartialRead(const char* part_file, const char* full_file,
+                        const char* partition_name) {
+  char cmd[CMD_BUF_SIZE];
+  int ret = 0;
+
+  snprintf(cmd, sizeof(cmd), "%s %s -i FMAP -i '%s':'%s' "
+                             "-r '%s' >/dev/null 2>&1",
            flashrom_cmd, flashrom_arguments,
            partition_name, part_file, full_file);
   ret = system(cmd);
