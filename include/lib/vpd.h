@@ -30,16 +30,6 @@ enum vpd_types {
   VPD_TYPE_BINARY_BLOB_POINTER  = 241,
 };
 
-/* The default RO VPD location in BIOS image.
- * If VPD partition cannot be found on fmap, buildEpsAndTables() will use
- * this value to count the offset fields of SPD and VPD 2.0.
- * User can specify -E argument to change the EPS base value.
- */
-#define GOOGLE_EPS_BASE 0xFFFFFFFF
-/* 0xFFFFFFFF is a special value, which is the value of a blank flash.
- * It means we don't know the eps->table_address.
- * This usually happens when we are creating a new VPD partition without
- * knowing the flash topology (fmap). */
 
 #define GOOGLE_SPD_OFFSET 0x400
 #define GOOGLE_SPD_UUID "75f4926b-9e43-4b32-8979-eb20c0eda76a"

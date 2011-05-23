@@ -87,7 +87,7 @@ off_t fmapFind(const uint8_t *image, size_t image_len) {
  *  TODO: need more sanity check for fmap.
  */
 int fmapGetArea(const char *name, const struct fmap *fmap,
-                off_t *offset, off_t *size) {
+                uint32_t *offset, uint32_t *size) {
   int i;
 
   assert(offset);
