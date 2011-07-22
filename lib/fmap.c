@@ -52,7 +52,7 @@ void fmapNormalizeAreaName(uint8_t *name) {
   assert(name);
 
   while (*name) {
-    if (!(isascii(*name) && (isalnum(*name) || *name == ' '))) {
+    if (!(isascii(*name) && isalnum(*name))) {
       *name = '_';
     }
     name++;
