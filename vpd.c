@@ -41,6 +41,16 @@ static uint8_t tmp_part_file[] = "/tmp/vpd.flashrom.XXXXXX";
  * file from flashromRead() to writeFlashrom(). */
 static uint8_t tmp_full_file[] = "/tmp/vpd.flashrom.XXXXXX";
 
+
+enum FileFlag {
+  HAS_SPD = (1 << 0),
+  HAS_VPD_2_0 = (1 << 1),
+  HAS_VPD_1_2 = (1 << 2),
+  /* TODO(yjlou): refine those variables in main() to here:
+   *              write_back_to_flash, overwrite_it, modified. */
+} file_flag = 0;
+
+
 /* 2 containers:
  *   file:      stores decoded pairs from file.
  *   argument:  stores parsed pairs from command arguments.
@@ -343,6 +353,48 @@ int getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
 }
 
 
+/* Below 2 functions are the helper functions for extract data from VPD 1.x
+ * binary-encoded structure.
+ * Note that the returning pointer is a static buffer. Thus the later call will
+ * destroy the former call's result.
+ */
+static uint8_t* extractString(const uint8_t* value, const int max_len) {
+  static uint8_t buf[128];
+  int copy_len;
+
+  /* not longer than the buffer size */
+  copy_len = (max_len > sizeof(buf) - 1) ? sizeof(buf) - 1 : max_len;
+  memcpy(buf, value, copy_len);
+  buf[copy_len] = '\0';
+
+  return buf;
+}
+
+static uint8_t* extractHex(const uint8_t* value, const int len) {
+  uint8_t tmp[4];  /* for a hex string */
+  static uint8_t buf[128];
+  int in, out;  /* in points to value[], while out points to buf[]. */
+
+  for (in = 0, out = 0;; ++in) {
+    if (out + 3 > sizeof(buf) - 1) {
+      goto end_of_func;  /* no more buffer */
+    }
+    if (in >= len) {  /* no more input */
+      if (out) --out;  /* remove the tailing colon */
+      goto end_of_func;
+    }
+    sprintf(tmp, "%02x:", value[in]);
+    memcpy(&buf[out], tmp, strlen(tmp));
+    out += strlen(tmp);
+  }
+
+end_of_func:
+  buf[out] = '\0';
+
+  return buf;
+}
+
+
 int loadFile(const char *filename, struct PairContainer *container,
              int overwrite_it) {
   uint32_t file_size;
@@ -352,8 +404,8 @@ int loadFile(const char *filename, struct PairContainer *container,
   uint32_t related_eps_base;
   struct vpd_header *header;
   struct vpd_table_binary_blob_pointer *data;
-  uint8_t spd_uuid[16], vpd_2_0_uuid[16];
-  int expected_handle = 0;
+  uint8_t spd_uuid[16], vpd_2_0_uuid[16], vpd_1_2_uuid[16];
+  int expected_handle;
   int table_len;
   int index;
   int retval = 0;
@@ -452,83 +504,136 @@ int loadFile(const char *filename, struct PairContainer *container,
   data = (struct vpd_table_binary_blob_pointer *)
          ((uint8_t *)header + sizeof(*header));
 
-  /* TODO(yjlou): Re-factor the parsing code to support more SMBIOS entries.
-   *              The current code only supports 2 combinations:
-   *                1. Type 241 (SPD) + Type 241 (VPD 2.0) + Type 127
-   *                2. Type 241 (VPD 2.0) + Type 127
-   */
 
-  /* Now header points to the first SMBIOS entry, and data points to the
-   * first BBP entry. The first entry could be SPD data. We don't care. */
-  if (header->handle != expected_handle) {
-    fprintf(stderr, "[ERROR] The first handle value must be 0, but is %d.\n"
-                    "        Use -O option to re-format.\n",
-                    header->handle);
-    retval = 1;
-    goto teardown;
-  }
-  if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) {
-    fprintf(stderr, "Expect first entry is type Binary Blob Pointer (241),"
-                    " but actually is %d\n", header->type);
-    fprintf(stderr, "You may use -O to overwrite the data.\n");
-    retval = 1;
-    goto teardown;
-  }
+  /* prepare data structure to compare */
   uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
-  if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
-    ++expected_handle;
-    spd_offset = data->offset - related_eps_base;
-    spd_len = data->size;
-    if (vpd_offset + spd_offset + spd_len >= file_size) {
-      fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
-                      "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%x\n"
-                      "        If this file is VPD partition only, try to\n"
-                      "        use -E to adjust offset values.\n",
-                      (uint32_t)vpd_offset, (uint32_t)spd_offset,
-                      spd_len, file_size);
-      retval = 1;
-      goto teardown;
-    }
-    if (!(spd_data = malloc(spd_len))) {
-      fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
-      retval = 1;
-      goto teardown;
-    }
-    memcpy(spd_data, &read_buf[vpd_offset + spd_offset], spd_len);
-
-    /* move to next table */
-    if ((table_len = vpd_type241_size(header)) < 0) {
-      fprintf(stderr, "[ERROR] Cannot get type 241 structure table length.\n");
-      retval = 1;
-      goto teardown;
-    }
-    header = (struct vpd_header*)((uint8_t*)header + table_len);
-    data = (struct vpd_table_binary_blob_pointer *)
-           ((uint8_t *)header + sizeof(*header));
-  }
-
-  /* The 2nd could be VPD 2.0 data or End Of Table. */
-  if (header->handle != expected_handle) {
-    fprintf(stderr, "[ERROR] The second handle value must be 1, but is %d.\n"
-                    "        Use -O option to re-format.\n",
-                    header->handle);
-    retval = 1;
-    goto teardown;
-  }
   uuid_parse(GOOGLE_VPD_2_0_UUID, vpd_2_0_uuid);
-  if (header->type == VPD_TYPE_BINARY_BLOB_POINTER &&
-      !memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
-    ++expected_handle;
+  uuid_parse(GOOGLE_VPD_1_2_UUID, vpd_1_2_uuid);
 
-    /* iterate all pairs */
-    for (index = data->offset - related_eps_base;  /* skip the EPS */
-         vpd_buf[index] != VPD_TYPE_TERMINATOR &&
-         vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-      if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
-        fprintf(stderr, "decodeVpdString() error.\n");
+  /* Iterate all tables */
+  for (expected_handle = 0;
+       header->type != VPD_TYPE_END;
+       ++expected_handle) {
+    /* make sure we haven't have too much handle already. */
+    if (expected_handle > 65535) {
+      fprintf(stderr, "[ERROR] too many handles. Terminate parsing.\n");
+      retval = 1;
+      goto teardown;
+    }
+
+    /* check type */
+    if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) {
+      fprintf(stderr, "[ERROR] We now only support Binary Blob Pointer (241). "
+                      "But the %dth handle is type %d. Terminate parsing.\n",
+                      header->handle, header->type);
+      retval = 1;
+      goto teardown;
+    }
+
+    /* make sure handle is increasing as expected */
+    if (header->handle != expected_handle) {
+      fprintf(stderr, "[ERROR] The handle value must be %d, but is %d.\n"
+                      "        Use -O option to re-format.\n",
+                      expected_handle, header->handle);
+      retval = 1;
+      goto teardown;
+    }
+
+    /* point to the table 241 data part */
+    index = data->offset - related_eps_base;
+    if (index >= file_size) {
+      fprintf(stderr, "[ERROR] the table offset looks suspicious. "
+                      "index=0x%x, data->offset=0x%x, related_eps_base=0x%x\n",
+                      index, data->offset, related_eps_base);
+      retval = 1;
+      goto teardown;
+    }
+
+    /*
+     * The main switch case
+     */
+    if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
+      /* SPD */
+      spd_offset = index;
+      spd_len = data->size;
+      if (vpd_offset + spd_offset + spd_len >= file_size) {
+        fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
+                        "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%x\n"
+                        "        If this file is VPD partition only, try to\n"
+                        "        use -E to adjust offset values.\n",
+                        (uint32_t)vpd_offset, (uint32_t)spd_offset,
+                        spd_len, file_size);
         retval = 1;
         goto teardown;
       }
+
+      if (!(spd_data = malloc(spd_len))) {
+        fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
+        retval = 1;
+        goto teardown;
+      }
+      memcpy(spd_data, &read_buf[vpd_offset + spd_offset], spd_len);
+      file_flag |= HAS_SPD;
+
+    } else if (!memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
+      /* VPD 2.0 */
+      /* iterate all pairs */
+      for (;
+           vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+           vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+        if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
+          fprintf(stderr, "decodeVpdString() error.\n");
+          retval = 1;
+          goto teardown;
+        }
+      }
+      file_flag |= HAS_VPD_2_0;
+
+    } else if (!memcmp(data->uuid, vpd_1_2_uuid, sizeof(data->uuid))) {
+      /* VPD 1_2: please refer to "Google VPD Type 241 Format v1.2" */
+      struct V12 {
+        uint8_t prod_sn[0x20];
+        uint8_t sku[0x10];
+        uint8_t uuid[0x10];
+        uint8_t mb_sn[0x10];
+        uint8_t imei[0x10];
+        uint8_t ssd_sn[0x10];
+        uint8_t mem_sn[0x10];
+        uint8_t wlan_mac[0x06];
+      } *v12 = (void*)&vpd_buf[index];
+      setString(container, "Product_SN",
+                extractString(v12->prod_sn, sizeof(v12->prod_sn)),
+                VPD_AS_LONG_AS);
+      setString(container, "SKU",
+                extractString(v12->sku, sizeof(v12->sku)), VPD_AS_LONG_AS);
+      setString(container, "UUID",
+                extractHex(v12->uuid, sizeof(v12->uuid)),
+                VPD_AS_LONG_AS);
+      setString(container, "MotherBoard_SN",
+                extractString(v12->mb_sn, sizeof(v12->mb_sn)),
+                VPD_AS_LONG_AS);
+      setString(container, "IMEI",
+                extractString(v12->imei, sizeof(v12->imei)),
+                VPD_AS_LONG_AS);
+      setString(container, "SSD_SN",
+                extractString(v12->ssd_sn, sizeof(v12->ssd_sn)),
+                VPD_AS_LONG_AS);
+      setString(container, "Memory_SN",
+                extractString(v12->mem_sn, sizeof(v12->mem_sn)),
+                VPD_AS_LONG_AS);
+      setString(container, "WLAN_MAC",
+                extractHex(v12->wlan_mac, sizeof(v12->wlan_mac)),
+                VPD_AS_LONG_AS);
+      file_flag |= HAS_VPD_1_2;
+
+    } else {
+      /* un-supported UUID */
+      char outstr[37];  /* 36-char + 1 null terminator */
+
+      uuid_unparse(data->uuid, outstr);
+      fprintf(stderr, "[ERROR] un-supported UUID: %s\n", outstr);
+      retval = 1;
+      goto teardown;
     }
 
     /* move to next table */
@@ -537,17 +642,10 @@ int loadFile(const char *filename, struct PairContainer *container,
       retval = 1;
       goto teardown;
     }
+
     header = (struct vpd_header*)((uint8_t*)header + table_len);
     data = (struct vpd_table_binary_blob_pointer *)
            ((uint8_t *)header + sizeof(*header));
-  } else {
-    fprintf(stderr, "[WARN] no VPD 2.0 BBP is found, ignored.\n");
-    retval = 0;
-    goto teardown;
-  }
-
-  if (header->type != VPD_TYPE_END) {
-    fprintf(stderr, "[WARN] we expect the last one is type 127. It's fine.\n");
   }
 
 teardown:
@@ -803,9 +901,15 @@ int main(int argc, char *argv[]) {
   if (!filename) {
     if (FLASHROM_OK != flashromPartialRead(tmp_part_file, tmp_full_file,
                                            fmap_vpd_area_name)) {
-      fprintf(stderr, "flashromPartialRead() error!\n");
-      retval = 1;
-      goto teardown;
+      fprintf(stderr, "[WARN] flashromPartialRead() failed, try full read.\n");
+      /* Try to read whole file */
+      if (FLASHROM_OK != flashromFullRead(tmp_full_file)) {
+        fprintf(stderr, "[ERROR] flashromFullRead() error!\n");
+        retval = 1;
+        goto teardown;
+      } else {
+        /* Success! Then the fmap_vpd_area_name is changed for later use. */
+      }
     }
 
     write_back_to_flash = 1;
@@ -841,6 +945,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (modified) {
+    if (file_flag & HAS_VPD_1_2) {
+      retval = 1;
+      fprintf(stderr, "[ERROR] Writing VPD 1.2 not supported yet.\n");
+      goto teardown;
+    }
+
     if (retval = saveFile(&file, save_file, write_back_to_flash)) {
       fprintf(stderr, "saveFile('%s') error.\n", filename);
       goto teardown;

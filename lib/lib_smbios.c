@@ -254,7 +254,8 @@ vpd_create_type241_fail:
  * returns <0 to indicate failure
  */
 int vpd_type241_size(struct vpd_header *header) {
-  uint8_t *ptr = ((uint8_t*)header) + header->length;
+  uint8_t *ptr = (uint8_t*)header;
+  uint8_t *str = ptr + header->length;
   int length = sizeof(struct vpd_header) +
                sizeof(struct vpd_table_binary_blob_pointer);
   int i;
@@ -262,13 +263,23 @@ int vpd_type241_size(struct vpd_header *header) {
   /* Sanity check */
   if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) return -1;
 
+  /* Three variant-length strings are following. */
   for (i = 0; i < 3; ++i) {
-    int len = strlen(ptr) + 1;
+    int len = strlen(str) + 1;
     length += len;
-    ptr += len;
+    str += len;
   }
-  length++;  /* Additional null(0) to indicate end of set.
-              * Refer to SMBIOS spec 3.1.3 Text Strings. */
+
+  /* Additional null(0) to indicate end of set, so called structure terminator.
+   * Refer to SMBIOS spec 3.1.3 Text Strings.
+   * However, in VPD 1.x, the mosys would generate a buggy type 241 structure,
+   * which missed the terminator. See mosys between r169 and r211.
+   * The workaround is simple, when counting VPD 241 length, look at the byte
+   * byte after variant string. If it is 0x00, means it's the structure
+   * terminator. If non-zero, then it must be the next table type.
+   */
+  if (ptr[length] == 0) length++;  /* increase only if this is terminator. */
+
   return length;
 }
 
