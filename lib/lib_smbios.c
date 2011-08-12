@@ -169,7 +169,7 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
 {
   struct vpd_header *header;
   struct vpd_table_binary_blob_pointer *data;
-  uint8_t *string_ptr;
+  char *string_ptr;
   size_t struct_len, total_len;
   int string_index = 1;
 
@@ -191,7 +191,7 @@ int vpd_append_type241(uint16_t handle, uint8_t **buf,
   header = (struct vpd_header *)(*buf + len);
   data = (struct vpd_table_binary_blob_pointer *)
             ((uint8_t *)header + sizeof(*header));
-  string_ptr = (uint8_t *)data + sizeof(*data);
+  string_ptr = (char *)data + sizeof(*data);
 
   /* fill in structure header details */
   header->type = VPD_TYPE_BINARY_BLOB_POINTER;
@@ -255,7 +255,7 @@ vpd_create_type241_fail:
  */
 int vpd_type241_size(struct vpd_header *header) {
   uint8_t *ptr = (uint8_t*)header;
-  uint8_t *str = ptr + header->length;
+  char *str = (char*)ptr + header->length;
   int length = sizeof(struct vpd_header) +
                sizeof(struct vpd_table_binary_blob_pointer);
   int i;

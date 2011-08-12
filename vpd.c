@@ -35,11 +35,11 @@
 #define BUF_LEN (128 * 1024)
 
 /* temp filename for partial read area. */
-static uint8_t tmp_part_file[] = "/tmp/vpd.flashrom.XXXXXX";
+static char tmp_part_file[] = "/tmp/vpd.flashrom.XXXXXX";
 /* temp filename for the full flash content (actually only partial content
  * is available). But for flashrom -w to match flash size, we need to keep this
  * file from flashromRead() to writeFlashrom(). */
-static uint8_t tmp_full_file[] = "/tmp/vpd.flashrom.XXXXXX";
+static char tmp_full_file[] = "/tmp/vpd.flashrom.XXXXXX";
 
 
 enum FileFlag {
@@ -64,7 +64,7 @@ struct PairContainer argument;
 int pad_value_len = VPD_AS_LONG_AS;
 
 /* The output buffer */
-unsigned char buf[BUF_LEN];
+uint8_t buf[BUF_LEN];
 int buf_len = 0;
 int max_buf_len = sizeof(buf);
 
@@ -81,7 +81,7 @@ int eps_base_force_specified = 0;  /* a bool value to indicate if -E argument
                                     * is given. */
 
 /* the fmap name of VPD. */
-uint8_t fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
+char fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
 
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFlie(). */
@@ -109,7 +109,7 @@ uint8_t *spd_data = NULL;
 int32_t spd_len = 256;  /* max value for DDR3 */
 
 
-int myMkTemp(uint8_t *tmp_file) {
+int myMkTemp(char *tmp_file) {
   int fd;
   fd = mkstemp(tmp_file);
   if (fd < 0) {
@@ -208,19 +208,18 @@ error_1:
  *  pair container.
  */
 int parseString(const uint8_t *string) {
-  char *key;
-  char *value;
+  uint8_t *key;
+  uint8_t *value;
   int retval = VPD_OK;
 
-  key = strdup(string);
-  key = strtok(key, "=");
+  key = (uint8_t*)strdup((char*)string);
+  key = (uint8_t*)strtok((char*)key, "=");
   /* We accept empty value: "KEY=" */
-  if (!(value = strtok(NULL, "=")))
-    value = "";
+  if (!(value = (uint8_t*)strtok(NULL, "=")))
+    value = (uint8_t*)"";
 
   setString(&argument, key, value, pad_value_len);
 
-error:
   free(key);
   return retval;
 }
@@ -328,7 +327,7 @@ uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
 
 int getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
-  uint8_t filename[] = "/tmp/vpd.flashrom.XXXXXX";
+  char filename[] = "/tmp/vpd.flashrom.XXXXXX";
   uint8_t *buf;
   uint32_t buf_size;
   int retval;
@@ -371,7 +370,7 @@ static uint8_t* extractString(const uint8_t* value, const int max_len) {
 }
 
 static uint8_t* extractHex(const uint8_t* value, const int len) {
-  uint8_t tmp[4];  /* for a hex string */
+  char tmp[4];  /* for a hex string */
   static uint8_t buf[128];
   int in, out;  /* in points to value[], while out points to buf[]. */
 
@@ -601,27 +600,27 @@ int loadFile(const char *filename, struct PairContainer *container,
         uint8_t mem_sn[0x10];
         uint8_t wlan_mac[0x06];
       } *v12 = (void*)&vpd_buf[index];
-      setString(container, "Product_SN",
+      setString(container, (uint8_t*)"Product_SN",
                 extractString(v12->prod_sn, sizeof(v12->prod_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, "SKU",
+      setString(container, (uint8_t*)"SKU",
                 extractString(v12->sku, sizeof(v12->sku)), VPD_AS_LONG_AS);
-      setString(container, "UUID",
+      setString(container, (uint8_t*)"UUID",
                 extractHex(v12->uuid, sizeof(v12->uuid)),
                 VPD_AS_LONG_AS);
-      setString(container, "MotherBoard_SN",
+      setString(container, (uint8_t*)"MotherBoard_SN",
                 extractString(v12->mb_sn, sizeof(v12->mb_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, "IMEI",
+      setString(container, (uint8_t*)"IMEI",
                 extractString(v12->imei, sizeof(v12->imei)),
                 VPD_AS_LONG_AS);
-      setString(container, "SSD_SN",
+      setString(container, (uint8_t*)"SSD_SN",
                 extractString(v12->ssd_sn, sizeof(v12->ssd_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, "Memory_SN",
+      setString(container, (uint8_t*)"Memory_SN",
                 extractString(v12->mem_sn, sizeof(v12->mem_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, "WLAN_MAC",
+      setString(container, (uint8_t*)"WLAN_MAC",
                 extractHex(v12->wlan_mac, sizeof(v12->wlan_mac)),
                 VPD_AS_LONG_AS);
       file_flag |= HAS_VPD_1_2;
@@ -790,12 +789,11 @@ int main(int argc, char *argv[]) {
   char *filename = NULL;
   char *load_file = NULL;
   char *save_file = NULL;
-  char *filter_str = NULL;
+  uint8_t *filter_str = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
   int modified = 0;
-  int fd;
 
   initContainer(&file);
   initContainer(&argument);
@@ -828,7 +826,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 's':
-        if (VPD_OK != parseString(optarg)) {
+        if (VPD_OK != parseString((uint8_t*)optarg)) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           retval = 1;
           goto teardown;
@@ -864,7 +862,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'g':
-        filter_str = strdup(optarg);
+        filter_str = (uint8_t*)strdup(optarg);
         break;
 
       default:
@@ -920,7 +918,7 @@ int main(int argc, char *argv[]) {
     save_file = filename;
   }
 
-  if (retval = loadFile(load_file, &file, overwrite_it)) {
+  if ((retval = loadFile(load_file, &file, overwrite_it))) {
     fprintf(stderr, "loadFile('%s') error.\n", load_file);
     goto teardown;
   }
@@ -951,7 +949,7 @@ int main(int argc, char *argv[]) {
       goto teardown;
     }
 
-    if (retval = saveFile(&file, save_file, write_back_to_flash)) {
+    if ((retval = saveFile(&file, save_file, write_back_to_flash))) {
       fprintf(stderr, "saveFile('%s') error.\n", filename);
       goto teardown;
     }

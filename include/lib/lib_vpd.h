@@ -45,8 +45,8 @@ enum {  /* export_type */
 
 
 struct StringPair {
-  unsigned char *key;
-  unsigned char *value;
+  uint8_t *key;
+  uint8_t *value;
   int pad_len;
   int filter_out;  /* TRUE means not exported. */
   struct StringPair *next;
@@ -98,7 +98,7 @@ int decodeLen(
  */
 int encodeVpdTerminator(
     const int max_buffer_len,
-    unsigned char *output_buf,
+    uint8_t *output_buf,
     int *generated_len);
 
 /* Encodes the given type/key/value pair into buffer.
@@ -122,11 +122,11 @@ int encodeVpdTerminator(
  * can be used between multiple calls to encodeVpd2Pair().
  */
 int encodeVpdString(
-    const unsigned char *key,
-    const unsigned char *value,
+    const uint8_t *key,
+    const uint8_t *value,
     const int pad_value_len,
     const int max_buffer_len,
-    unsigned char *output_buf,
+    uint8_t *output_buf,
     int *generated_len);
 
 
@@ -152,14 +152,14 @@ int decodeVpdString(
 void initContainer(struct PairContainer *container);
 
 struct StringPair *findString(const struct PairContainer *container,
-                              const unsigned char *key);
+                              const uint8_t *key);
 
 /* If key is already existed in container, its value will be replaced.
  * If not existed, creates new entry in container.
  */
 void setString(struct PairContainer *container,
-               const unsigned char *key,
-               const unsigned char *value,
+               const uint8_t *key,
+               const uint8_t *value,
                const int pad_len);
 
 /* merge all entries in src into dst. If key is duplicate, overwrite it.
@@ -171,7 +171,7 @@ void mergeContainer(struct PairContainer *dst,
  */
 int encodeContainer(const struct PairContainer *container,
                     const int max_buf_len,
-                    unsigned char *buf,
+                    uint8_t *buf,
                     int *generated);
 
 /* Set filter for exporting functions.

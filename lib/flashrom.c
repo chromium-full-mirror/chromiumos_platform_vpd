@@ -73,9 +73,7 @@ int flashromPartialRead(const char* part_file, const char* full_file,
 
 int flashromPartialWrite(const char* part_file, const char* full_file,
                          const char* partition_name) {
-  int fd;
   char cmd[CMD_BUF_SIZE];
-  FILE* fp;
   int ret = 0;
 
   /* write it back */

@@ -63,18 +63,18 @@ struct crypto_algo;  /* forward declaration */
 
 /* Mapping of volatile and static regions in firmware binary */
 struct fmap {
-  uint64_t signature;    /* "__FMAP__" (0x5F5F50414D465F5F) */
-  uint8_t  ver_major;    /* major version */
-  uint8_t  ver_minor;    /* minor version */
+  uint8_t signature[8];    /* "__FMAP__" (0x5F5F50414D465F5F) */
+  uint8_t ver_major;    /* major version */
+  uint8_t ver_minor;    /* minor version */
   uint64_t base;      /* address of the firmware binary */
   uint32_t size;      /* size of firmware binary in bytes */
-  uint8_t  name[FMAP_STRLEN];  /* name of this firmware binary */
+  char name[FMAP_STRLEN];  /* name of this firmware binary */
   uint16_t nareas;    /* number of areas described by
              fmap_areas[] below */
   struct fmap_area {
     uint32_t offset;    /* offset relative to base */
     uint32_t size;      /* size in bytes */
-    uint8_t  name[FMAP_STRLEN];  /* descriptive name */
+    char name[FMAP_STRLEN];  /* descriptive name */
     uint16_t flags;      /* flags for this area */
   }  __attribute__((packed)) areas[];
 } __attribute__((packed));
@@ -91,7 +91,7 @@ struct fmap {
  *
  * @name: point to the name.
  */
-void fmapNormalizeAreaName(uint8_t *name);
+void fmapNormalizeAreaName(char *name);
 
 
 /*

@@ -48,7 +48,7 @@
 #include "lib/fmap.h"
 
 
-void fmapNormalizeAreaName(uint8_t *name) {
+void fmapNormalizeAreaName(char *name) {
   assert(name);
 
   while (*name) {

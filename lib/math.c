@@ -43,13 +43,16 @@
 int ctz(unsigned long long int u)
 {
   int num_zeros;
-  float f;
+  union {
+    float f;
+    uint32_t i;
+  } alias;
 
   if (u == 0)   /* The algorithm will return -127 on this condition */
     return 0;
 
-  f = (float)(u & (~u + 1));
-  num_zeros = (*(unsigned int *)&f >> 23) - 0x7f;
+  alias.f = (float)(u & (~u + 1));
+  num_zeros = (alias.i >> 23) - 0x7f;
 
   return num_zeros;
 }

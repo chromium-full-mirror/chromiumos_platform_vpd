@@ -100,7 +100,7 @@ int decodeLen(
  */
 int encodeVpdTerminator(
     const int max_buffer_len,
-    unsigned char *output_buf,
+    uint8_t *output_buf,
     int *generated_len) {
   assert(generated_len);
 
@@ -115,21 +115,20 @@ int encodeVpdTerminator(
 
 /* Encodes a string with padding support. */
 int encodeVpdString(
-    const unsigned char *key,
-    const unsigned char *value,
+    const uint8_t *key,
+    const uint8_t *value,
     const int pad_value_len,
     const int max_buffer_len,
-    unsigned char *output_buf,
+    uint8_t *output_buf,
     int *generated_len) {
   int key_len, value_len;
-  int out_index = 0;
   int ret_len;
   int pad_len = 0;
 
   assert(generated_len);
 
-  key_len = strlen(key);
-  value_len = strlen(value);
+  key_len = strlen((char*)key);
+  value_len = strlen((char*)value);
   output_buf += *generated_len;  /* move cursor to end of string */
 
   /* encode type */
@@ -207,7 +206,7 @@ int decodeVpdString(
 
       key = malloc(length + 1);
       assert(key);
-      strncpy(key, &input_buf[*consumed], length);
+      strncpy((char*)key, (char*)&input_buf[*consumed], length);
       key[length] = '\0';
       *consumed += length;
 
@@ -220,7 +219,7 @@ int decodeVpdString(
 
       value = malloc(length + 1);
       assert(value);
-      strncpy(value, &input_buf[*consumed], length);
+      strncpy((char*)value, (char*)&input_buf[*consumed], length);
       value[length] = '\0';
       *consumed += length;
 
@@ -243,11 +242,11 @@ void initContainer(struct PairContainer *container) {
 }
 
 struct StringPair *findString(const struct PairContainer *container,
-                              const unsigned char *key) {
+                              const uint8_t *key) {
   struct StringPair *current;
 
   for (current = container->first; current; current = current->next) {
-    if (!strcmp(key, current->key)) {
+    if (!strcmp((char*)key, (char*)current->key)) {
       return current;
     }
   }
@@ -256,14 +255,14 @@ struct StringPair *findString(const struct PairContainer *container,
 
 /* Just a helper function for setString() */
 static void fillStringPair(struct StringPair *pair,
-                           const unsigned char *key,
-                           const unsigned char *value,
+                           const uint8_t *key,
+                           const uint8_t *value,
                            const int pad_len) {
-  pair->key = malloc(strlen(key) + 1);
+  pair->key = malloc(strlen((char*)key) + 1);
   assert(pair->key);
-  strcpy(pair->key, key);
-  pair->value = malloc(strlen(value) + 1);
-  strcpy(pair->value, value);
+  strcpy((char*)pair->key, (char*)key);
+  pair->value = malloc(strlen((char*)value) + 1);
+  strcpy((char*)pair->value, (char*)value);
   pair->pad_len = pad_len;
 }
 
@@ -271,8 +270,8 @@ static void fillStringPair(struct StringPair *pair,
  * If not existed, creates new entry in container.
  */
 void setString(struct PairContainer *container,
-               const unsigned char *key,
-               const unsigned char *value,
+               const uint8_t *key,
+               const uint8_t *value,
                const int pad_len) {
   struct StringPair *found;
 
@@ -289,7 +288,7 @@ void setString(struct PairContainer *container,
     fillStringPair(new_pair, key, value, pad_len);
 
     /* append this pair to the end of list. to keep the order */
-    if (found = container->first) {
+    if ((found = container->first)) {
       while (found->next) found = found->next;
       found->next = new_pair;
     } else {
@@ -313,7 +312,7 @@ void mergeContainer(struct PairContainer *dst,
 
 int encodeContainer(const struct PairContainer *container,
                     const int max_buf_len,
-                    unsigned char *buf,
+                    uint8_t *buf,
                     int *generated) {
   struct StringPair *current;
 
@@ -341,7 +340,7 @@ int setContainerFilter(struct PairContainer *container,
        * Now, we treat the inputing filter string as plain string.
        * Will support regular expression syntax in future if needed.
        */
-      if (strcmp(str->key, filter)) {
+      if (strcmp((char*)str->key, (char*)filter)) {
         str->filter_out = 1;
       }
     } else {
@@ -376,7 +375,7 @@ int exportContainer(const int export_type,
       snprintf(pad_str, sizeof(pad_str), "-p %d -s ", str->pad_len);
       pad_len = strlen(pad_str);
       if ((index + pad_len) > max_buf_len) return VPD_FAIL;
-      strcpy(&buf[index], pad_str);
+      strcpy((char*)&buf[index], (char*)pad_str);
       index += pad_len;
     }
 
@@ -386,9 +385,9 @@ int exportContainer(const int export_type,
       buf[index++] = '"';
 
       /* output key */
-      if ((index + strlen(str->key)) > max_buf_len) return VPD_FAIL;
-      strcpy(&buf[index], str->key);
-      index += strlen(str->key);
+      if ((index + strlen((char*)str->key)) > max_buf_len) return VPD_FAIL;
+      strcpy((char*)&buf[index], (char*)str->key);
+      index += strlen((char*)str->key);
 
       /* double quote */
       if ((index + 1 > max_buf_len)) return VPD_FAIL;
@@ -405,9 +404,9 @@ int exportContainer(const int export_type,
 
     /* output value */
     if (str->pad_len != VPD_AS_LONG_AS)
-      copy_len = MIN(str->pad_len, strlen(str->value));
+      copy_len = MIN(str->pad_len, strlen((char*)str->value));
     else
-      copy_len = strlen(str->value);
+      copy_len = strlen((char*)str->value);
     if ((index + copy_len) > max_buf_len) return VPD_FAIL;
     memcpy(&buf[index], str->value, copy_len);
     index += copy_len;
