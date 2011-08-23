@@ -9,19 +9,89 @@
 TMP=$(mktemp)
 VPD_2_0="/var/log/vpd_2.0.txt"
 
-if [ "$1" = "--force" ]; then
-  force=1
+# Load shflags
+. /usr/lib/shflags
+
+
+DEFINE_boolean "clean" ${FLAGS_FALSE} "Clean the cached file."
+DEFINE_boolean "force" ${FLAGS_FALSE} "Force to re-generate cached file."
+DEFINE_boolean "full" ${FLAGS_FALSE} "Generate full output. No filter."
+DEFINE_boolean "stdout" ${FLAGS_FALSE} "Output to STDOUT, instead of file."
+
+
+set_only_root_readable() {
+  chown root:root "$1"
+  chmod go-strwx "$1"
+}
+
+
+set_world_readable() {
+  chown root:root "$1"
+  chmod go-stwx "$1"
+  chmod go+r "$1"
+}
+
+
+generate_sed_filter() {
+  local whitelist="\
+    initial_locale \
+    keyboard_layout \
+    initial_timezone \
+    ActivateDate"
+  local output=''
+
+  for field in ${whitelist}; do
+    output=${output}'/^"'${field}'"=/p;'
+  done
+  output=${output}'/^.*/d;'
+
+  echo $output
+}
+
+
+#
+# main()
+#
+FLAGS "$@" || exit 1
+eval set -- "${FLAGS_ARGV}"
+
+# Remove the temp file, which has full data if the script terminates early.
+trap "test -f $TMP && rm $TMP" EXIT
+
+if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
+  rm $VPD_2_0 || exit 1
+  exit 0
+fi
+
+if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} ]; then
+  TMP=/dev/stdout
 else
-  force=0
+  set_only_root_readable $TMP
 fi
 
-# Since we don't change the VPD data too often, only create the log file
-# if it does not exist.
-if [ ! -f $VPD_2_0 -o $force -eq 1 ]; then
-  rm -f $TMP
-  (vpd -i "RO_VPD" -l || echo "RO VPD execute error.") >> $TMP
-  (vpd -i "RW_VPD" -l || echo "RW VPD execute error.") >> $TMP
-  chmod go-stwx $TMP
+if [ -f $VPD_2_0 -a \
+     ${FLAGS_stdout} -eq ${FLAGS_FALSE} -a \
+     ${FLAGS_force} -eq ${FLAGS_FALSE} ]; then
+  # File exists and we don't need to re-generate it. Exit now.
+  exit 0
+fi
+
+# Set the filter for white list.
+if [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
+  sed_filter=';'
+else
+  sed_filter=$(generate_sed_filter)
+fi
+
+# Re-generate file.
+(vpd -i "RO_VPD" -l || echo "RO VPD execute error.") | \
+    sed -e $sed_filter >> $TMP
+(vpd -i "RW_VPD" -l || echo "RW VPD execute error.") | \
+    sed -e $sed_filter >> $TMP
+
+# Replace the VPD_2_0 file with the tmp file if it doesn't output to stdout.
+if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
+  set_world_readable $TMP
   mv -f $TMP $VPD_2_0
+  trap - EXIT
 fi
-
