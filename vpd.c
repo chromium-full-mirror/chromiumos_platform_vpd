@@ -436,11 +436,13 @@ teardown:
 }
 
 
-int saveFile(const struct PairContainer *container, const char *filename) {
+int saveFile(const struct PairContainer *container, const char *filename,
+      int write_back_to_flash) {
   FILE *fp;
   unsigned char eps[1024];
   int eps_len = 0;
   int retval = 0;
+  uint32_t file_seek;
 
   memset(eps, 0xff, sizeof(eps));
 
@@ -486,8 +488,14 @@ int saveFile(const struct PairContainer *container, const char *filename) {
     }
   }
 
+  if (write_back_to_flash) {
+    file_seek = 0;
+  } else {
+    file_seek = vpd_offset;
+  }
+
   /* write EPS */
-  fseek(fp, vpd_offset + eps_offset, SEEK_SET);
+  fseek(fp, file_seek + eps_offset, SEEK_SET);
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
     retval = 1;
@@ -496,7 +504,7 @@ int saveFile(const struct PairContainer *container, const char *filename) {
 
   /* write SPD */
   if (spd_data) {
-    fseek(fp, vpd_offset + spd_offset, SEEK_SET);
+    fseek(fp, file_seek + spd_offset, SEEK_SET);
     if (fwrite(spd_data, spd_len, 1, fp) != 1) {
       fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
       retval = 1;
@@ -505,7 +513,7 @@ int saveFile(const struct PairContainer *container, const char *filename) {
   }
 
   /* write VPD 2.0 */
-  fseek(fp, vpd_offset + vpd_2_0_offset, SEEK_SET);
+  fseek(fp, file_seek + vpd_2_0_offset, SEEK_SET);
   if (fwrite(buf, buf_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(VPD 2.0) error (%s)\n", strerror(errno));
     retval = 1;
@@ -567,6 +575,8 @@ int main(int argc, char *argv[]) {
     {"overwrite", 0, 0, 'O'},
   };
   char *filename = NULL;
+  char *load_file = NULL;
+  char *save_file = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
@@ -671,11 +681,15 @@ int main(int argc, char *argv[]) {
       goto teardown;
     }
     write_back_to_flash = 1;
-    filename = strdup(tmp_part_file);
+    load_file = tmp_full_file;
+    save_file = tmp_part_file;
+  } else {
+    load_file = filename;
+    save_file = filename;
   }
 
-  if (retval = loadFile(filename, &file, overwrite_it)) {
-    fprintf(stderr, "loadFile('%s') error.\n", filename);
+  if (retval = loadFile(load_file, &file, overwrite_it)) {
+    fprintf(stderr, "loadFile('%s') error.\n", load_file);
     goto teardown;
   }
 
@@ -697,13 +711,13 @@ int main(int argc, char *argv[]) {
   }
 
   if (modified) {
-    if (retval = saveFile(&file, filename)) {
-      fprintf(stderr, "saveFile('%s') error.\n", filename);
+    if (retval = saveFile(&file, save_file, write_back_to_flash)) {
+      fprintf(stderr, "saveFile('%s') error.\n", save_file);
       goto teardown;
     }
 
     if (write_back_to_flash) {
-      if (FLASHROM_OK != flashromPartialWrite(filename, tmp_full_file,
+      if (FLASHROM_OK != flashromPartialWrite(save_file, tmp_full_file,
                                               fmap_vpd_area_name)) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
         retval = 1;

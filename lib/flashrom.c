@@ -47,7 +47,8 @@ int flashromRead(const char* part_file, const char* full_file,
   char cmd[CMD_BUF_SIZE];
   int ret = 0;
 
-  snprintf(cmd, sizeof(cmd), "%s %s -i '%s':'%s' -r '%s' >/dev/null 2>&1",
+  snprintf(cmd, sizeof(cmd), "%s %s -i FMAP -i '%s':'%s' "
+                             "-r '%s' >/dev/null 2>&1",
            flashrom_cmd, flashrom_arguments,
            partition_name, part_file, full_file);
   ret = system(cmd);
