@@ -10,7 +10,7 @@ TMP=$(mktemp)
 VPD_2_0="/var/log/vpd_2.0.txt"
 
 # Load shflags
-. /usr/lib/shflags
+. /usr/share/misc/shflags
 
 
 DEFINE_boolean "clean" ${FLAGS_FALSE} "Clean the cached file."
