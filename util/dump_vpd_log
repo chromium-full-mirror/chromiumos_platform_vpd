@@ -1,17 +1,28 @@
 #!/bin/sh
 #
-# Helper function to dump VPD RO/RW content into /var/log/vpd_2.0.txt
+# Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Helper function to dump VPD RO/RW content into /var/vpd_2.0.txt.
 #
 # Used in:
 #  + OOBE reads this log file for the default locale setting.
-#  + chrome://system reads this log file.
+#  + chrome://system reads filtered file.
 #
+
+umask 0077  # Conservative strategy. Allow root-only first. Open later.
 TMP=$(mktemp)
-VPD_2_0="/var/log/vpd_2.0.txt"
+BIOS_TMP=$(mktemp)
+FULL_TEXT_TMP=$(mktemp)
+FILTERED_FILE="/var/log/vpd_2.0.txt"
+FULL_TEXT_CACHE="/var/cache/vpd/full.cache"
+
+# Remove the temp file, which has full data if the script terminates early.
+trap "rm -f ${TMP} ${BIOS_TMP} ${FULL_TEXT_TMP}" EXIT
 
 # Load shflags
 . /usr/share/misc/shflags
-
 
 DEFINE_boolean "clean" ${FLAGS_FALSE} "Clean the cached file."
 DEFINE_boolean "force" ${FLAGS_FALSE} "Force to re-generate cached file."
@@ -19,16 +30,10 @@ DEFINE_boolean "full" ${FLAGS_FALSE} "Generate full output. No filter."
 DEFINE_boolean "stdout" ${FLAGS_FALSE} "Output to STDOUT, instead of file."
 
 
-set_only_root_readable() {
-  chown root:root "$1"
-  chmod go-strwx "$1"
-}
-
-
 set_world_readable() {
-  chown root:root "$1"
-  chmod go-stwx "$1"
-  chmod go+r "$1"
+  chown root:root "$1" || exit 1
+  chmod go-stwx "$1" || exit 1
+  chmod ugo+r "$1" || exit 1
 }
 
 
@@ -49,49 +54,73 @@ generate_sed_filter() {
 }
 
 
+# $1: BIOS filename
+# $2: partition name
+# $3: file name to append output
+generate_full_text() {
+  (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >> $3
+}
+
+
 #
 # main()
 #
+
+# parse arguments
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
 
-# Remove the temp file, which has full data if the script terminates early.
-trap "test -f $TMP && rm $TMP" EXIT
-
 if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
-  rm $VPD_2_0 || exit 1
+  rm -f ${FILTERED_FILE} ${FULL_TEXT_CACHE}
   exit 0
+fi
+
+# --full is a powerful option able to dump sensitive data. It is easy
+# to forget --stdout and accidentally makes full-dumped file world-readable.
+# Thus, add a check here to stop the careless caller.
+# A caller really needs --full, please use in this way:
+#
+#   dump_vpd_log --full --stdout  > a_root_readable_file
+#
+if [ ${FLAGS_full} -eq ${FLAGS_TRUE} -a \
+     ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
+  echo "You specified --full but without --stdout. This is dangerous."
+  exit 1
 fi
 
 if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} ]; then
   TMP=/dev/stdout
-else
-  set_only_root_readable $TMP
 fi
 
-if [ -f $VPD_2_0 -a \
+if [ -f ${FILTERED_FILE} -a \
      ${FLAGS_stdout} -eq ${FLAGS_FALSE} -a \
      ${FLAGS_force} -eq ${FLAGS_FALSE} ]; then
   # File exists and we don't need to re-generate it. Exit now.
   exit 0
 fi
 
-# Set the filter for white list.
-if [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
-  sed_filter=';'
-else
-  sed_filter=$(generate_sed_filter)
+# If the cache file doesn't exist or --force, generate it.
+if [ ! -f ${FULL_TEXT_CACHE} -o \
+     ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
+  flashrom -p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r $BIOS_TMP ||
+    flashrom -p internal:bus=spi -r $BIOS_TMP
+
+  mkdir -p $(dirname ${FULL_TEXT_CACHE})
+  touch $FULL_TEXT_TMP
+  generate_full_text "${BIOS_TMP}" "RO_VPD" $FULL_TEXT_TMP
+  generate_full_text "${BIOS_TMP}" "RW_VPD" $FULL_TEXT_TMP
+  mv -f $FULL_TEXT_TMP $FULL_TEXT_CACHE
 fi
 
-# Re-generate file.
-(vpd -i "RO_VPD" -l || echo "RO VPD execute error.") | \
-    sed -e $sed_filter >> $TMP
-(vpd -i "RW_VPD" -l || echo "RW VPD execute error.") | \
-    sed -e $sed_filter >> $TMP
+# Set the filter for white list.
+if [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
+  cp -f $FULL_TEXT_CACHE $TMP
+else
+  sed -e $(generate_sed_filter) < $FULL_TEXT_CACHE > $TMP
+fi
 
-# Replace the VPD_2_0 file with the tmp file if it doesn't output to stdout.
+# Replace the output file with the tmp file if it doesn't output to stdout.
 if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
   set_world_readable $TMP
-  mv -f $TMP $VPD_2_0
-  trap - EXIT
+  mv -f $TMP ${FILTERED_FILE}
 fi
