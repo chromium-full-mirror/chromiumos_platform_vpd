@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <uuid/uuid.h>
 #include "lib/flashrom.h"
 #include "lib/fmap.h"
@@ -34,12 +35,13 @@
 /* The buffer length. Right now the VPD partition size on flash is 128KB. */
 #define BUF_LEN (128 * 1024)
 
-/* temp filename for partial read area. */
-static char tmp_part_file[] = "/tmp/vpd.flashrom.XXXXXX";
-/* temp filename for the full flash content (actually only partial content
- * is available). But for flashrom -w to match flash size, we need to keep this
- * file from flashromRead() to writeFlashrom(). */
-static char tmp_full_file[] = "/tmp/vpd.flashrom.XXXXXX";
+
+/* Linked list to track temporary files
+ */
+struct TempfileNode {
+  char *filename;
+  struct TempfileNode *next;
+} *tempfile_list = NULL;
 
 
 enum FileFlag {
@@ -100,7 +102,7 @@ uint32_t vpd_offset = 0, vpd_size;  /* The whole partition */
  * Those are used in saveFile() to write back data. */
 uint32_t eps_offset = 0;  /* EPS's starting address. Tables[] is following. */
 uint32_t spd_offset = GOOGLE_SPD_OFFSET;  /* SPD address .*/
-off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
+off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET;  /* VPD 2.0 data address. */
 
 /* This points to the SPD data if it is availiable when loadFile().
  * The memory is allocated in loadFile(), will be used in saveFile(),
@@ -108,15 +110,48 @@ off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
 uint8_t *spd_data = NULL;
 int32_t spd_len = 256;  /* max value for DDR3 */
 
-
-int myMkTemp(char *tmp_file) {
+/* Creates a temporary file and return the filename, or NULL for any failure.
+ */
+const char *myMkTemp() {
+  char tmp_file[] = "/tmp/vpd.flashrom.XXXXXX";
+  struct TempfileNode *node;
   int fd;
+
   fd = mkstemp(tmp_file);
   if (fd < 0) {
     fprintf(stderr, "mkstemp(%s) failed\n", tmp_file);
+    return NULL;
   }
-  return fd;
+
+  close(fd);
+  node = (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
+  assert(node);
+  node->next = tempfile_list;
+  node->filename = strdup(tmp_file);
+  assert(node->filename);
+  tempfile_list = node;
+
+  return node->filename;
 }
+
+
+/*  Erases all files created by myMkTemp
+ */
+void cleanTempFiles() {
+  struct TempfileNode *node;
+
+  while (tempfile_list) {
+    node = tempfile_list;
+    tempfile_list = node->next;
+    if (unlink(node->filename) < 0) {
+      fprintf(stderr, "warning: failed removing temporary file: %s\n",
+              node->filename);
+    }
+    free(node->filename);
+    free(node);
+  }
+}
+
 
 /*  Given the offset of blob block (related to the first byte of EPS) and
  *  the size of blob, the is function generates an SMBIOS ESP.
@@ -327,12 +362,13 @@ uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
 
 int getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
-  char filename[] = "/tmp/vpd.flashrom.XXXXXX";
+  const char *filename;
   uint8_t *buf;
   uint32_t buf_size;
   int retval;
 
-  if (myMkTemp(filename) < 0) {
+  filename = myMkTemp();
+  if (!filename) {
     return 1;
   }
 
@@ -743,12 +779,6 @@ teardown:
   return retval;
 }
 
-int generateTempFilenames(void) {
-  if (myMkTemp(tmp_part_file) < 0) return -1;
-  if (myMkTemp(tmp_full_file) < 0) return -1;
-  return 0;
-}
-
 static void usage(const char *progname) {
   printf("Chrome OS VPD 2.0 utility --\n");
 #ifdef VPD_VERSION
@@ -787,8 +817,10 @@ int main(int argc, char *argv[]) {
     {0, 0, 0, 0}
   };
   char *filename = NULL;
-  char *load_file = NULL;
-  char *save_file = NULL;
+  const char *load_file = NULL;
+  const char *save_file = NULL;
+  const char *tmp_part_file = NULL;
+  const char *tmp_full_file = NULL;
   uint8_t *filter_str = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
@@ -880,8 +912,10 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  if (generateTempFilenames() < 0) {
-    fprintf(stderr, "[ERROR] generateTempFilenames() returns failed.\n");
+  tmp_part_file = myMkTemp();
+  tmp_full_file = myMkTemp();
+  if (!tmp_part_file || !tmp_full_file) {
+    fprintf(stderr, "[ERROR] Failed creating temporary files.\n");
     retval = 1;
     goto teardown;
   }
@@ -970,6 +1004,7 @@ teardown:
   if (filter_str) free(filter_str);
   destroyContainer(&file);
   destroyContainer(&argument);
+  cleanTempFiles();
 
   return retval;
 }
