@@ -12,24 +12,31 @@
 #
 
 umask 0077  # Conservative strategy. Allow root-only first. Open later.
-TMP=$(mktemp)
 BIOS_TMP=$(mktemp)
-FULL_TEXT_TMP=$(mktemp)
+FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
 FILTERED_FILE="/var/log/vpd_2.0.txt"
-FULL_TEXT_CACHE="/var/cache/vpd/full.cache"
+CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
+CACHE_FILE="/var/cache/vpd/full.cache"
 
 # Remove the temp file, which has full data if the script terminates early.
-trap "rm -f ${TMP} ${BIOS_TMP} ${FULL_TEXT_TMP}" EXIT
+trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP}" EXIT
 
-# Load shflags
+# Load shflags, define script flags.
 . /usr/share/misc/shflags
 
-DEFINE_boolean "clean" ${FLAGS_FALSE} "Clean the cached file."
-DEFINE_boolean "force" ${FLAGS_FALSE} "Force to re-generate cached file."
-DEFINE_boolean "full" ${FLAGS_FALSE} "Generate full output. No filter."
-DEFINE_boolean "stdout" ${FLAGS_FALSE} "Output to STDOUT, instead of file."
+DEFINE_boolean "clean" ${FLAGS_FALSE} \
+  "Clean VPD cache and output files, then quit."
+DEFINE_boolean "force" ${FLAGS_FALSE} \
+  "Force regeneration of VPD cache and output files."
+DEFINE_boolean "full" ${FLAGS_FALSE} \
+  "Generate full output, without filtering."
+DEFINE_boolean "stdout" ${FLAGS_FALSE} \
+  "Dump VPD to standard output, instead of a file."
 
 
+# Change file ownership and permissions so it is world readable.
+#
+# $1: name of file to change ownership/permissions to.
 set_world_readable() {
   chown root:root "$1" || exit 1
   chmod go-stwx "$1" || exit 1
@@ -37,23 +44,31 @@ set_world_readable() {
 }
 
 
+# Generate a sed filter for VPD output depending on the provided flag.
+#
+# $1: Boolean flag: permit all output (true) or apply whitelist (false).
 generate_sed_filter() {
-  local whitelist="\
-    initial_locale \
-    keyboard_layout \
-    initial_timezone \
-    ActivateDate"
   local output=''
 
-  for field in ${whitelist}; do
-    output=${output}'/^"'${field}'"=/p;'
-  done
-  output=${output}'/^.*/d;'
+  if [ $1 -eq ${FLAGS_FALSE} ]; then
+    local whitelist="\
+      initial_locale \
+      keyboard_layout \
+      initial_timezone \
+      ActivateDate"
 
-  echo $output
+    for field in ${whitelist}; do
+      output=${output}'/^"'${field}'"=/p;'
+    done
+    output=${output}'/^.*/d;'
+  fi
+
+  echo ${output}
 }
 
 
+# Invoke the VPD utility for generating full VPD content.
+#
 # $1: BIOS filename
 # $2: partition name
 # $3: file name to append output
@@ -66,61 +81,56 @@ generate_full_text() {
 # main()
 #
 
-# parse arguments
+# Parse arguments.
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
 
-if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
-  rm -f ${FILTERED_FILE} ${FULL_TEXT_CACHE}
-  exit 0
-fi
+# Remove output files if --clean or --force flagged.
+if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} -o \
+     ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
+  rm -f ${FILTERED_FILE} ${CACHE_FILE}
 
-# --full is a powerful option able to dump sensitive data. It is easy
-# to forget --stdout and accidentally makes full-dumped file world-readable.
-# Thus, add a check here to stop the careless caller.
-# A caller really needs --full, please use in this way:
-#
-#   dump_vpd_log --full --stdout  > a_root_readable_file
-#
-if [ ${FLAGS_full} -eq ${FLAGS_TRUE} -a \
-     ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
-  echo "You specified --full but without --stdout. This is dangerous."
-  exit 1
+  # If --clean was flagged, we're done.
+  if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
+    exit 0
+  fi
 fi
 
 if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} ]; then
-  TMP=/dev/stdout
+  FILTERED_TMP=/dev/stdout
+elif [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
+  # --full must only be used with --stdout, to prevent accidental dumping of
+  # sensitive VPD info into a world-readable file. To be used as follows:
+  #
+  #   dump_vpd_log --full --stdout  > a_root_readable_file
+  #
+  echo "You specified --full without --stdout, aborting."
+  exit 1
 fi
 
-if [ -f ${FILTERED_FILE} -a \
-     ${FLAGS_stdout} -eq ${FLAGS_FALSE} -a \
-     ${FLAGS_force} -eq ${FLAGS_FALSE} ]; then
-  # File exists and we don't need to re-generate it. Exit now.
-  exit 0
+# If the cache file is missing, generate it.
+if [ ! -f ${CACHE_FILE} ]; then
+  flashrom -p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP} ||
+    flashrom -p internal:bus=spi -r ${BIOS_TMP}
+
+  mkdir -p $(dirname ${CACHE_FILE})
+  generate_full_text "${BIOS_TMP}" "RO_VPD" ${CACHE_TMP}
+  generate_full_text "${BIOS_TMP}" "RW_VPD" ${CACHE_TMP}
+  mv -f ${CACHE_TMP} ${CACHE_FILE}
+
+  # Remove existing filtered output file, forcing it to be regenerated.
+  rm -f ${FILTERED_FILE}
 fi
 
-# If the cache file doesn't exist or --force, generate it.
-if [ ! -f ${FULL_TEXT_CACHE} -o \
-     ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
-  flashrom -p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r $BIOS_TMP ||
-    flashrom -p internal:bus=spi -r $BIOS_TMP
+# Filter the full VPD output.
+if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
+     ! -f ${FILTERED_FILE} ]; then
+  sed -e "$(generate_sed_filter ${FLAGS_full})" < ${CACHE_FILE} \
+    > ${FILTERED_TMP}
 
-  mkdir -p $(dirname ${FULL_TEXT_CACHE})
-  touch $FULL_TEXT_TMP
-  generate_full_text "${BIOS_TMP}" "RO_VPD" $FULL_TEXT_TMP
-  generate_full_text "${BIOS_TMP}" "RW_VPD" $FULL_TEXT_TMP
-  mv -f $FULL_TEXT_TMP $FULL_TEXT_CACHE
-fi
-
-# Set the filter for white list.
-if [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
-  cp -f $FULL_TEXT_CACHE $TMP
-else
-  sed -e $(generate_sed_filter) < $FULL_TEXT_CACHE > $TMP
-fi
-
-# Replace the output file with the tmp file if it doesn't output to stdout.
-if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
-  set_world_readable $TMP
-  mv -f $TMP ${FILTERED_FILE}
+  # Rename temporary into permanent output if --stdout was not used.
+  if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
+    set_world_readable ${FILTERED_TMP}
+    mv -f ${FILTERED_TMP} ${FILTERED_FILE}
+  fi
 fi
