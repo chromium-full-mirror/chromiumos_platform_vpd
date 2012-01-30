@@ -12,11 +12,26 @@
 #
 
 umask 0077  # Conservative strategy. Allow root-only first. Open later.
+
+# A temporary file used for caching the results of flashrom across subsequent
+# invocations of the vpd utility within this script.
 BIOS_TMP=$(mktemp)
+
+# Files for temporary and final caching of full VPD data. Note that the
+# temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
+CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
+CACHE_FILE="/var/cache/vpd/full-v2.cache"
+
+# A space delimited list of old VPD cache files, which will be removed as a
+# cleanup measure. Please be sure to update this list as the cache filename
+# changes between versions of this script!
+OLD_CACHE_FILES="/var/cache/vpd/full.cache"
+
+# Files for temporary and final storage of filtered VPD data. Note that the
+# temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
 FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
 FILTERED_FILE="/var/log/vpd_2.0.txt"
-CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
-CACHE_FILE="/var/cache/vpd/full.cache"
+
 
 # Remove the temp file, which has full data if the script terminates early.
 trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP}" EXIT
@@ -84,6 +99,12 @@ generate_full_text() {
 # Parse arguments.
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
+
+# Cleanup: remove old versions of the VPD cache file; this ensures that we
+# don't have unused VPD data lying around, which takes unnecessary space, might
+# lead to stale VPD log extraction (in case of a script version rollback), and
+# is perceived as a potential security breach.
+rm -f ${OLD_CACHE_FILES}
 
 # Remove output files if --clean or --force flagged.
 if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} -o \
