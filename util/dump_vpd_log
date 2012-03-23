@@ -22,6 +22,9 @@ BIOS_TMP=$(mktemp)
 CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
 CACHE_FILE="/var/cache/vpd/full-v2.cache"
 
+# Location for storing cached ECHO coupon codes.
+ECHO_COUPON_FILE="/var/cache/offers/vpd_echo.txt"
+
 # A space delimited list of old VPD cache files, which will be removed as a
 # cleanup measure. Please be sure to update this list as the cache filename
 # changes between versions of this script!
@@ -62,17 +65,13 @@ set_world_readable() {
 # Generate a sed filter for VPD output depending on the provided flag.
 #
 # $1: Boolean flag: permit all output (true) or apply whitelist (false).
+# $2, $3, ..: (Optional) Each parameter is one whitelisted key.
 generate_sed_filter() {
   local output=''
-
-  if [ $1 -eq ${FLAGS_FALSE} ]; then
-    local whitelist="\
-      initial_locale \
-      keyboard_layout \
-      initial_timezone \
-      ActivateDate"
-
-    for field in ${whitelist}; do
+  local all_output=$1
+  shift
+  if [ $all_output -eq ${FLAGS_FALSE} ]; then
+    for field in $*; do
       output=${output}'/^"'${field}'"=/p;'
     done
     output=${output}'/^.*/d;'
@@ -81,6 +80,19 @@ generate_sed_filter() {
   echo ${output}
 }
 
+# Generate the coupon code file containing cached VPD ECHO attributes.
+generate_echo_codes() {
+  local echo_code_keys="
+    ubind_attribute
+    gbind_attribute"
+  mkdir -p $(dirname ${ECHO_COUPON_FILE})
+  sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
+    < ${CACHE_FILE} > ${ECHO_COUPON_FILE}
+  # Since chrome needs access to this, the file is readable by user chronos.
+  # Note: It should NOT be world readable.
+  # TODO(gauravsh): Broker this via debugd. http://crosbug.com/28285
+  chown -R chronos:chronos $(dirname ${ECHO_COUPON_FILE})
+}
 
 # Invoke the VPD utility for generating full VPD content.
 #
@@ -143,10 +155,20 @@ if [ ! -f ${CACHE_FILE} ]; then
   rm -f ${FILTERED_FILE}
 fi
 
+# If the ECHO coupon cache is missing, generate it.
+if [ ! -f ${ECHO_COUPON_FILE} ]; then
+  generate_echo_codes
+fi
+
 # Filter the full VPD output.
 if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
      ! -f ${FILTERED_FILE} ]; then
-  sed -e "$(generate_sed_filter ${FLAGS_full})" < ${CACHE_FILE} \
+  WHITELIST="
+    initial_locale
+    keyboard_layout
+    initial_timezone
+    ActivateDate"
+  sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < ${CACHE_FILE} \
     > ${FILTERED_TMP}
 
   # Rename temporary into permanent output if --stdout was not used.
