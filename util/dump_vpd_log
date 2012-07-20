@@ -121,7 +121,7 @@ rm -f ${OLD_CACHE_FILES}
 # Remove output files if --clean or --force flagged.
 if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} -o \
      ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
-  rm -f ${FILTERED_FILE} ${CACHE_FILE}
+  rm -f ${FILTERED_FILE} ${CACHE_FILE} ${ECHO_COUPON_FILE}
 
   # If --clean was flagged, we're done.
   if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
