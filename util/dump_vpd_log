@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
+# Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
@@ -23,12 +23,12 @@ CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
 CACHE_FILE="/var/cache/vpd/full-v2.cache"
 
 # Location for storing cached ECHO coupon codes.
-ECHO_COUPON_FILE="/var/cache/offers/vpd_echo.txt"
+ECHO_COUPON_FILE="/var/cache/echo/vpd_echo.txt"
 
 # A space delimited list of old VPD cache files, which will be removed as a
 # cleanup measure. Please be sure to update this list as the cache filename
 # changes between versions of this script!
-OLD_CACHE_FILES="/var/cache/vpd/full.cache"
+OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt"
 
 # Files for temporary and final storage of filtered VPD data. Note that the
 # temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
