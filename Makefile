@@ -1,23 +1,27 @@
+# Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 CC?=cc
 VERSION := $(shell ./util/getversion.sh)
-CFLAGS+=-g -static -Iinclude/ -Werror -Wall -D'VPD_VERSION="$(VERSION)"'
+CFLAGS+=-g -Iinclude/ -Werror -Wall -D'VPD_VERSION="$(VERSION)"'
 LDFLAGS+=-luuid
+BINARY=vpd
 
-all: binary
+OBJS=	lib/flashrom.o \
+	lib/fmap.o \
+	lib/lib_smbios.o \
+	lib/lib_vpd.o \
+	lib/math.o \
+	vpd.o
 
-libs:
-	$(CC) $(CFLAGS) -o lib/flashrom.o -c lib/flashrom.c
-	$(CC) $(CFLAGS) -o lib/fmap.o -c lib/fmap.c
-	$(CC) $(CFLAGS) -o lib/lib_smbios.o -c lib/lib_smbios.c
-	$(CC) $(CFLAGS) -o lib/lib_vpd.o -c lib/lib_vpd.c
-	$(CC) $(CFLAGS) -o lib/math.o -c lib/math.c
+all: $(BINARY)
 
-binary: libs
-	$(CC) $(CFLAGS) -o vpd.o -c vpd.c
-	$(CC) $(CFLAGS) -o vpd vpd.o lib/lib_vpd.o lib/lib_smbios.o lib/math.o \
-	                   lib/flashrom.o lib/fmap.o -luuid
+$(BINARY): $(OBJS)
+	$(CC) $(CFLAGS) -o vpd $(OBJS) -luuid
+	$(CC) $(CFLAGS) -static -o vpd_s $(OBJS) -luuid
 
-test: libs
+test: $(OBJS)
 	$(CC) $(CFLAGS) -o lib/lib_vpd_test.o -c lib/lib_vpd_test.c
 	$(CC) $(CFLAGS) -o vpd_test lib/lib_vpd.o lib/lib_vpd_test.o
 	./vpd_test
