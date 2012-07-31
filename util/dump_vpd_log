@@ -17,10 +17,16 @@ umask 0077  # Conservative strategy. Allow root-only first. Open later.
 # invocations of the vpd utility within this script.
 BIOS_TMP=$(mktemp)
 
+# The unencrypted directory to store VPD cache files. VPD may run when
+# encrypted partition is available. Also, accessing unencrypted partition is
+# faster.
+UNENCRYPTED="/mnt/stateful_partition/unencrypted/cache"
+
 # Files for temporary and final caching of full VPD data. Note that the
 # temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
 CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
-CACHE_FILE="/var/cache/vpd/full-v2.cache"
+CACHE_FILE="${UNENCRYPTED}/vpd/full-v2.txt"
+CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
 # Location for storing cached ECHO coupon codes.
 ECHO_COUPON_FILE="/var/cache/echo/vpd_echo.txt"
@@ -28,12 +34,14 @@ ECHO_COUPON_FILE="/var/cache/echo/vpd_echo.txt"
 # A space delimited list of old VPD cache files, which will be removed as a
 # cleanup measure. Please be sure to update this list as the cache filename
 # changes between versions of this script!
-OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt"
+OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
+                 /var/cache/vpd/full-v2.cache"
 
 # Files for temporary and final storage of filtered VPD data. Note that the
 # temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
 FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
-FILTERED_FILE="/var/log/vpd_2.0.txt"
+FILTERED_FILE="${UNENCRYPTED}/vpd/filtered.txt"
+FILTERED_LINK="/var/log/vpd_2.0.txt"
 
 
 # Remove the temp file, which has full data if the script terminates early.
@@ -103,6 +111,34 @@ generate_full_text() {
   (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >> $3
 }
 
+# Migrate the legacy file under encrypted partition to be a symlink pointing to
+# the target file under unencrypted partition.
+#
+# After call, the legacy file becomes symlink (either be pointed to target, or
+# be moved to target).
+migrate() {
+  local legacy=$1
+  local target=$2
+
+  if [ -L ${legacy} ]; then
+    return
+  elif [ ! -e ${legacy} ]; then
+    echo -n # create symlink at end of function.
+  elif [ -f ${legacy} ]; then
+    if [ -e ${target} ]; then
+      rm -f ${legacy}
+    else
+      mkdir -p $(dirname ${target})
+      mv -f ${legacy} ${target}
+    fi
+  else
+    echo "The type of legacy file ${legacy} cannot be migrated."
+    exit 1
+  fi
+  mkdir -p $(dirname ${legacy})
+  ln -sf ${target} ${legacy}
+}
+
 
 #
 # main()
@@ -121,7 +157,8 @@ rm -f ${OLD_CACHE_FILES}
 # Remove output files if --clean or --force flagged.
 if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} -o \
      ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
-  rm -f ${FILTERED_FILE} ${CACHE_FILE} ${ECHO_COUPON_FILE}
+  rm -f ${FILTERED_FILE} ${CACHE_FILE} ${ECHO_COUPON_FILE} \
+        ${FILTERED_LINK} ${CACHE_LINK}
 
   # If --clean was flagged, we're done.
   if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
@@ -174,6 +211,11 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
   # Rename temporary into permanent output if --stdout was not used.
   if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
     set_world_readable ${FILTERED_TMP}
+    mkdir -p $(dirname ${FILTERED_FILE})
     mv -f ${FILTERED_TMP} ${FILTERED_FILE}
   fi
 fi
+
+# Create symlink if needed
+migrate ${FILTERED_LINK} ${FILTERED_FILE}
+migrate ${CACHE_LINK} ${CACHE_FILE}
