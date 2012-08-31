@@ -58,6 +58,8 @@ DEFINE_boolean "full" ${FLAGS_FALSE} \
   "Generate full output, without filtering."
 DEFINE_boolean "stdout" ${FLAGS_FALSE} \
   "Dump VPD to standard output, instead of a file."
+DEFINE_boolean "debug" ${FLAGS_FALSE} \
+  "Debug mode."
 
 
 # Change file ownership and permissions so it is world readable.
@@ -148,6 +150,10 @@ migrate() {
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
 
+if [ ${FLAGS_debug} -eq ${FLAGS_TRUE} ]; then
+  debug_log="/tmp/dump_vpd_log.debug"
+fi
+
 # Cleanup: remove old versions of the VPD cache file; this ensures that we
 # don't have unused VPD data lying around, which takes unnecessary space, might
 # lead to stale VPD log extraction (in case of a script version rollback), and
@@ -180,8 +186,18 @@ fi
 
 # If the cache file is missing, generate it.
 if [ ! -f ${CACHE_FILE} ]; then
-  flashrom -p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP} ||
-    flashrom -p internal:bus=spi -r ${BIOS_TMP}
+  args_partial="-p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
+  args_whole="-p internal:bus=spi -r ${BIOS_TMP}"
+  if [ -n ${debug_log} ]; then
+    echo "-------------------" $(date) >> ${debug_log}
+    flashrom ${args_partial} -V -V -V >> ${debug_log} 2>&1 ||
+      flashrom ${args_whole} -V -V -V >> ${debug_log} 2>&1 ||
+      exit 1
+  else
+    flashrom ${args_partial} ||
+      flashrom ${args_whole} ||
+      exit 1
+  fi
 
   mkdir -p $(dirname ${CACHE_FILE})
   generate_full_text "${BIOS_TMP}" "RO_VPD" ${CACHE_TMP}
