@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/dash
 #
 # Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -43,7 +43,6 @@ FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
 FILTERED_FILE="${UNENCRYPTED}/vpd/filtered.txt"
 FILTERED_LINK="/var/log/vpd_2.0.txt"
 
-
 # Remove the temp file, which has full data if the script terminates early.
 trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP}" EXIT
 
@@ -60,15 +59,35 @@ DEFINE_boolean "stdout" ${FLAGS_FALSE} \
   "Dump VPD to standard output, instead of a file."
 
 
-# Change file ownership and permissions so it is world readable.
 #
+# Make file access-able by root only.
 # $1: name of file to change ownership/permissions to.
-set_world_readable() {
+#
+set_conservative_perm() {
   chown root:root "$1" || exit 1
   chmod go-stwx "$1" || exit 1
+}
+
+#
+# Change file permissions so it is world readable.
+# $1: name of file to change ownership/permissions to.
+#
+set_world_readable() {
+  set_conservative_perm "$1"
   chmod ugo+r "$1" || exit 1
 }
 
+#
+# Create a directory and set it world enterable (iterate to root).
+# $1: directory name to create.
+#
+create_world_enterable() {
+  dir=$1
+
+  mkdir -p "${dir}"
+  set_conservative_perm "${dir}"
+  chmod ugo+x "${dir}"
+}
 
 # Generate a sed filter for VPD output depending on the provided flag.
 #
@@ -211,7 +230,7 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
   # Rename temporary into permanent output if --stdout was not used.
   if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
     set_world_readable ${FILTERED_TMP}
-    mkdir -p $(dirname ${FILTERED_FILE})
+    create_world_enterable $(dirname ${FILTERED_FILE})
     mv -f ${FILTERED_TMP} ${FILTERED_FILE}
   fi
 fi
