@@ -1,19 +1,7 @@
 /*
- * Copyright (C) 2010 Google Inc.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ * Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  *
  */
 #include <assert.h>
@@ -34,6 +22,14 @@
 
 /* The buffer length. Right now the VPD partition size on flash is 128KB. */
 #define BUF_LEN (128 * 1024)
+
+/* The comment shown in the begin of --sh output */
+#define SH_COMMENT                                                      \
+  "#\n"                                                                 \
+  "# Prepend 'vpd -O' before this text to always reset VPD content.\n"  \
+  "# Append more -s at end to set additional key/values.\n"             \
+  "# Or an empty line followed by other commands.\n"                    \
+  "#\n"
 
 
 /* Linked list to track temporary files
@@ -59,6 +55,8 @@ enum FileFlag {
  */
 struct PairContainer file;
 struct PairContainer argument;
+
+int export_type = VPD_EXPORT_KEY_VALUE;
 
 /* The current padding length value.
  * Default: VPD_AS_LONG_AS
@@ -794,6 +792,7 @@ static void usage(const char *progname) {
   printf("      -p <pad length>  Pad if length is shorter.\n");
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
+  printf("      --sh             Dump content for shell script.\n");
   printf("      -O               Overwrite and re-format VPD partition.\n");
   printf("      -g <key>         Print value string only.\n");
   printf("\n");
@@ -809,11 +808,12 @@ int main(int argc, char *argv[]) {
     {"file", 0, 0, 'f'},
     {"epsbase", 0, 0, 'E'},
     {"string", 0, 0, 's'},
-    {"pad", 0, 0, 'p'},
+    {"pad", required_argument, 0, 'p'},
     {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
     {"overwrite", 0, 0, 'O'},
     {"filter", 0, 0, 'g'},
+    {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
     {0, 0, 0, 0}
   };
   char *filename = NULL;
@@ -897,6 +897,9 @@ int main(int argc, char *argv[]) {
         filter_str = (uint8_t*)strdup(optarg);
         break;
 
+      case 0:
+        break;
+
       default:
         fprintf(stderr, "Invalid option (%s), use --help for usage.\n", optarg);
         retval = 1;
@@ -963,17 +966,37 @@ int main(int argc, char *argv[]) {
     /* Reserve larger size because the exporting generates longer string than
      * the encoded data. */
     uint8_t list_buf[BUF_LEN * 2];
+    char para_buf[BUF_LEN] = "";
     int list_len = 0;
 
-    if (filter_str) setContainerFilter(&file, filter_str);
+    if (filter_str) {
+      export_type = VPD_EXPORT_VALUE;
+      setContainerFilter(&file, filter_str);
+    }
+
     if (VPD_OK != exportContainer(
-          (filter_str) ? VPD_EXPORT_VALUE : VPD_EXPORT_KEY_VALUE,
-          &file, sizeof(list_buf), list_buf, &list_len)) {
+          export_type, &file, sizeof(list_buf), list_buf, &list_len)) {
       fprintf(stderr, "exportContainer(): Cannot generate string.\n");
       retval = 1;
       goto teardown;
     }
-    printf("%s", list_buf);
+
+    /* Export necessary program parameters */
+    if (export_type == VPD_EXPORT_AS_PARAMETER) {
+      char tmp_filename[BUF_LEN] = "";
+      char tmp_filter[BUF_LEN] = "";
+
+      if (filename)
+        snprintf(tmp_filename, sizeof(tmp_filename), "-f %s", filename);
+      if (filter_str)
+        snprintf(tmp_filter, sizeof(tmp_filter), "-g %s", filter_str);
+
+      snprintf(para_buf, sizeof(para_buf), "%s%s -i %s %s %s \\\n",
+               SH_COMMENT, argv[0], fmap_vpd_area_name,
+               tmp_filename, tmp_filter);
+    }
+
+    printf("%s%s", para_buf, list_buf);
   }
 
   if (modified) {

@@ -1,19 +1,7 @@
 /*
- * Copyright (C) 2010 Google Inc.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ * Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  *
  */
 #include <assert.h>
@@ -415,6 +403,13 @@ int exportContainer(const int export_type,
       /* double quote */
       if ((index + 1 > max_buf_len)) return VPD_FAIL;
       buf[index++] = '"';
+
+      if (export_type == VPD_EXPORT_AS_PARAMETER) {
+        /* backslash */
+        if ((index + 2 > max_buf_len)) return VPD_FAIL;
+        buf[index++] = ' ';
+        buf[index++] = '\\';
+      }
 
       /* new line */
       if ((index + 1 > max_buf_len)) return VPD_FAIL;
