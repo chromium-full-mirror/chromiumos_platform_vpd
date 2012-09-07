@@ -29,7 +29,8 @@ CACHE_FILE="${UNENCRYPTED}/vpd/full-v2.txt"
 CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
 # Location for storing cached ECHO coupon codes.
-ECHO_COUPON_FILE="/var/cache/echo/vpd_echo.txt"
+ECHO_COUPON_FILE="${UNENCRYPTED}/vpd/echo/vpd_echo.txt"
+ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
 # A space delimited list of old VPD cache files, which will be removed as a
 # cleanup measure. Please be sure to update this list as the cache filename
@@ -114,13 +115,14 @@ generate_echo_codes() {
   local echo_code_keys="
     ubind_attribute
     gbind_attribute"
-  mkdir -p $(dirname ${ECHO_COUPON_FILE})
+  mkdir -p "$(dirname ${ECHO_COUPON_FILE})" "$(dirname ${ECHO_COUPON_LINK})"
   sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
     < ${CACHE_FILE} > ${ECHO_COUPON_FILE}
   # Since chrome needs access to this, the file is readable by user chronos.
   # Note: It should NOT be world readable.
   # TODO(gauravsh): Broker this via debugd. http://crosbug.com/28285
-  chown -R chronos:chronos $(dirname ${ECHO_COUPON_FILE})
+  chown -R chronos:chronos "$(dirname ${ECHO_COUPON_FILE})" \
+    "$(dirname ${ECHO_COUPON_LINK})"
 }
 
 # Invoke the VPD utility for generating full VPD content.
@@ -207,10 +209,10 @@ fi
 if [ ! -f ${CACHE_FILE} ]; then
   args_partial="-p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
   args_whole="-p internal:bus=spi -r ${BIOS_TMP}"
-  if [ -n ${debug_log} ]; then
-    echo "-------------------" $(date) >> ${debug_log}
-    flashrom ${args_partial} -V -V -V >> ${debug_log} 2>&1 ||
-      flashrom ${args_whole} -V -V -V >> ${debug_log} 2>&1 ||
+  if [ -n "${debug_log}" ]; then
+    echo "-------------------" $(date) >> "${debug_log}"
+    flashrom ${args_partial} -V -V -V >> "${debug_log}" 2>&1 ||
+      flashrom ${args_whole} -V -V -V >> "${debug_log}" 2>&1 ||
       exit 1
   else
     flashrom ${args_partial} ||
@@ -221,7 +223,7 @@ if [ ! -f ${CACHE_FILE} ]; then
   mkdir -p $(dirname ${CACHE_FILE})
   generate_full_text "${BIOS_TMP}" "RO_VPD" ${CACHE_TMP}
   generate_full_text "${BIOS_TMP}" "RW_VPD" ${CACHE_TMP}
-  mv -f ${CACHE_TMP} ${CACHE_FILE}
+  mv -f "${CACHE_TMP}" "${CACHE_FILE}"
 
   # Remove existing filtered output file, forcing it to be regenerated.
   rm -f ${FILTERED_FILE}
@@ -251,6 +253,7 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
   fi
 fi
 
-# Create symlink if needed
-migrate ${FILTERED_LINK} ${FILTERED_FILE}
-migrate ${CACHE_LINK} ${CACHE_FILE}
+# Create symlinks if needed.
+migrate "${FILTERED_LINK}" "${FILTERED_FILE}"
+migrate "${CACHE_LINK}" "${CACHE_FILE}"
+migrate "${ECHO_COUPON_LINK}" "${ECHO_COUPON_FILE}"
