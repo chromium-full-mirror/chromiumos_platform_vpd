@@ -25,11 +25,12 @@ UNENCRYPTED="/mnt/stateful_partition/unencrypted/cache"
 # Files for temporary and final caching of full VPD data. Note that the
 # temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
 CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
-CACHE_FILE="${UNENCRYPTED}/vpd/full-v2.txt"
+CACHE_DIR="${UNENCRYPTED}/vpd"
+CACHE_FILE="${CACHE_DIR}/full-v2.txt"
 CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
 # Location for storing cached ECHO coupon codes.
-ECHO_COUPON_FILE="${UNENCRYPTED}/vpd/echo/vpd_echo.txt"
+ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
 ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
 # A space delimited list of old VPD cache files, which will be removed as a
@@ -41,7 +42,7 @@ OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
 # Files for temporary and final storage of filtered VPD data. Note that the
 # temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
 FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
-FILTERED_FILE="${UNENCRYPTED}/vpd/filtered.txt"
+FILTERED_FILE="${CACHE_DIR}/filtered.txt"
 FILTERED_LINK="/var/log/vpd_2.0.txt"
 
 # Remove the temp file, which has full data if the script terminates early.
@@ -81,15 +82,13 @@ set_world_readable() {
 }
 
 #
-# Create a directory and set it world enterable (iterate to root).
-# $1: directory name to create.
+# Set a directory as world enterable.
+# $1: directory path to set world enterable.
 #
-create_world_enterable() {
-  dir=$1
-
-  mkdir -p "${dir}"
+set_world_enterable() {
+  local dir=$1
   set_conservative_perm "${dir}"
-  chmod ugo+x "${dir}"
+  chmod ugo+x "${dir}" || exit 1
 }
 
 # Generate a sed filter for VPD output depending on the provided flag.
@@ -205,6 +204,9 @@ elif [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
   exit 1
 fi
 
+mkdir -p "${CACHE_DIR}"
+set_world_enterable "${CACHE_DIR}"
+
 # If the cache file is missing, generate it.
 if [ ! -f ${CACHE_FILE} ]; then
   args_partial="-p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
@@ -220,7 +222,6 @@ if [ ! -f ${CACHE_FILE} ]; then
       exit 1
   fi
 
-  mkdir -p $(dirname ${CACHE_FILE})
   generate_full_text "${BIOS_TMP}" "RO_VPD" ${CACHE_TMP}
   generate_full_text "${BIOS_TMP}" "RW_VPD" ${CACHE_TMP}
   mv -f "${CACHE_TMP}" "${CACHE_FILE}"
@@ -248,7 +249,6 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
   # Rename temporary into permanent output if --stdout was not used.
   if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
     set_world_readable ${FILTERED_TMP}
-    create_world_enterable $(dirname ${FILTERED_FILE})
     mv -f ${FILTERED_TMP} ${FILTERED_FILE}
   fi
 fi
