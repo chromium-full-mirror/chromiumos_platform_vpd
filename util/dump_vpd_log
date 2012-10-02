@@ -242,7 +242,9 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
     initial_locale
     keyboard_layout
     initial_timezone
-    ActivateDate"
+    ActivateDate
+    model_name
+    sku_number"
   sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < ${CACHE_FILE} \
     > ${FILTERED_TMP}
 
