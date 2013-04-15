@@ -229,13 +229,32 @@ void initContainer(struct PairContainer *container) {
   container->first = NULL;
 }
 
-struct StringPair *findString(const struct PairContainer *container,
-                              const uint8_t *key) {
+
+/*
+ * Returns the pointer to the 'key' entry.
+ * Returns NULL if the key is not found in 'container'.
+ *
+ * If 'prev_next' is not NULL, findString() stores the address of the "next"
+ * member of the StringPair prior to the returned StringPair (the special case
+ * is &container->first if first StringPair matches 'key'). This is for linked
+ * list manipulation. If 'prev_next' is NULL, findString() would just ignore
+ * it.
+ */
+struct StringPair *findString(struct PairContainer *container,
+                              const uint8_t *key,
+                              struct StringPair ***prev_next) {
   struct StringPair *current;
+
+  if (prev_next) {
+    *prev_next = &container->first;
+  }
 
   for (current = container->first; current; current = current->next) {
     if (!strcmp((char*)key, (char*)current->key)) {
       return current;
+    }
+    if (prev_next) {
+      *prev_next = &current->next;
     }
   }
   return NULL;
@@ -263,7 +282,7 @@ void setString(struct PairContainer *container,
                const int pad_len) {
   struct StringPair *found;
 
-  found = findString(container, key);
+  found = findString(container, key, NULL);
   if (found) {
     free(found->key);
     free(found->value);
@@ -285,6 +304,32 @@ void setString(struct PairContainer *container,
     new_pair->next = NULL;
   }
 }
+
+
+/*
+ * Remove a key.
+ * Returns VPD_OK if deleted successfully. Otherwise, VPD_FAIL.
+ */
+int deleteKey(struct PairContainer *container,
+              const uint8_t *key) {
+  struct StringPair *found, **prev_next;
+
+  found = findString(container, key, &prev_next);
+  if (found) {
+    free(found->key);
+    free(found->value);
+
+    /* remove the 'found' from the linked list. */
+    assert(prev_next);
+    *prev_next = found->next;
+    free(found);
+
+    return VPD_OK;
+  } else {
+    return VPD_FAIL;
+  }
+}
+
 
 /* Iterate src container and setString() in dst.
  * so that if key is duplicate, the one in dst is overwritten.

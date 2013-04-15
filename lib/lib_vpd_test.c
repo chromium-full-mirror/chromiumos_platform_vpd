@@ -1,21 +1,8 @@
 /*
- * Copyright (C) 2010 Google Inc.
+ * Copyright (c) 2013 The Chromium OS Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
- *
- * Testing code for lib_vpd.
  */
 #include <assert.h>
 #include <stdio.h>
@@ -27,6 +14,9 @@ enum {
   TEST_OK = 0,
   TEST_FAIL = 1,
 };
+
+
+#define CU8 (const uint8_t *)  /* for compiler warning on sign bit */
 
 
 int testEncodeLen() {
@@ -143,7 +133,7 @@ int testEncodeVpdString() {
   int generated = 0;
 
   assert(VPD_OK ==
-         encodeVpdString("KEY", "VALUE",
+         encodeVpdString(CU8"KEY", CU8"VALUE",
                          VPD_AS_LONG_AS, sizeof(buf), buf, &generated));
   assert(sizeof(expected) == generated);
   assert(!memcmp(expected, buf, generated));
@@ -162,7 +152,7 @@ int testEncodeVpdStringPadding() {
   unsigned char buf[256];
   int generated = 0;
 
-  assert(VPD_OK == encodeVpdString("KEY", "VALUE",
+  assert(VPD_OK == encodeVpdString(CU8"KEY", CU8"VALUE",
                                    8, sizeof(buf), buf, &generated));
   assert(sizeof(expected) == generated);
   assert(!memcmp(expected, buf, generated));
@@ -184,9 +174,9 @@ int testEncodeMultiStrings() {
   unsigned char buf[256];
   int generated = 0;
 
-  assert(VPD_OK == encodeVpdString("MAC", "01234567",
+  assert(VPD_OK == encodeVpdString(CU8"MAC", CU8"01234567",
                                    0x08, sizeof(buf), buf, &generated));
-  assert(VPD_OK == encodeVpdString("Prod/Id", "Mario09284",
+  assert(VPD_OK == encodeVpdString(CU8"Prod/Id", CU8"Mario09284",
                                    0x0c, sizeof(buf), buf, &generated));
   assert(sizeof(expected) == generated);
   assert(!memcmp(expected, buf, generated));
@@ -207,7 +197,7 @@ int testContainer() {
   struct PairContainer container;
 
   initContainer(&container);
-  setString(&container, "KEY", "VALUE", 8);
+  setString(&container, CU8"KEY", CU8"VALUE", 8);
   encodeContainer(&container, sizeof(buf), buf, &generated);
 
   assert(sizeof(expected) == generated);
@@ -247,6 +237,131 @@ int testDecodeVpdString() {
 }
 
 
+int testDeleteEmptyContainer() {
+  struct PairContainer container;
+
+  initContainer(&container);
+  assert(VPD_FAIL == deleteKey(&container, CU8"NON_EXISTED_KEY"));
+
+  /* still good for add */
+  setString(&container, CU8"FIRST", CU8"1", 8);
+  assert(NULL != findString(&container, CU8"FIRST", NULL));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
+int testDeleteFirstOfOne() {
+  struct PairContainer container;
+
+  initContainer(&container);
+
+  /* test the case that only one string in container. */
+  setString(&container, CU8"FIRST", CU8"1", 8);
+  assert(VPD_FAIL == deleteKey(&container, CU8"NON_EXISTED_KEY"));
+  assert(VPD_OK == deleteKey(&container, CU8"FIRST"));
+  assert(NULL == findString(&container, CU8"FIRST", NULL));
+
+  /* still good for add */
+  setString(&container, CU8"SECOND", CU8"2", 12);
+  assert(NULL != findString(&container, CU8"SECOND", NULL));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
+int testDeleteFirstOfTwo() {
+  struct PairContainer container;
+
+  initContainer(&container);
+
+  /* add 2 and remove the first one */
+  setString(&container, CU8"FIRST", CU8"1", 8);
+  setString(&container, CU8"SECOND", CU8"2", 8);
+  assert(VPD_FAIL == deleteKey(&container, CU8"NON_EXISTED_KEY"));
+  assert(VPD_OK == deleteKey(&container, CU8"FIRST"));
+  assert(NULL == findString(&container, CU8"FIRST", NULL));
+  assert(NULL != findString(&container, CU8"SECOND", NULL));
+
+  /* still good for add */
+  setString(&container, CU8"FIRST", CU8"1", 9);
+  assert(NULL != findString(&container, CU8"FIRST", NULL));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
+int testDeleteSecondOfTwo() {
+  struct PairContainer container;
+
+  initContainer(&container);
+
+  /* add 2 and remove the last one */
+  setString(&container, CU8"FIRST", CU8"1", 8);
+  setString(&container, CU8"SECOND", CU8"2", 8);
+  assert(VPD_FAIL == deleteKey(&container, CU8"NON_EXISTED_KEY"));
+  assert(VPD_OK == deleteKey(&container, CU8"SECOND"));
+  assert(NULL != findString(&container, CU8"FIRST", NULL));
+  assert(NULL == findString(&container, CU8"SECOND", NULL));
+
+  /* still good for add */
+  setString(&container, CU8"SECOND", CU8"2", 5);
+  assert(NULL != findString(&container, CU8"SECOND", NULL));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
+int testDeleteSecondOfThree() {
+  unsigned char expected[] = {
+    VPD_TYPE_STRING,
+    0x05, 'F', 'I', 'R', 'S', 'T',
+    0x03, '1', '\0', '\0',
+    VPD_TYPE_STRING,
+    0x05, 'T', 'H', 'I', 'R', 'D',
+    0x04, '3', '\0', '\0', '\0',
+  };
+  unsigned char buf[256];
+  int generated = 0;
+  struct PairContainer container;
+
+  initContainer(&container);
+
+  /* add 3 and remove the middle one */
+  setString(&container, CU8"FIRST", CU8"1", 3);
+  setString(&container, CU8"SECOND", CU8"2", 2);
+  setString(&container, CU8"THIRD", CU8"3", 4);
+  assert(VPD_FAIL == deleteKey(&container, CU8"NON_EXISTED_KEY"));
+  assert(VPD_OK == deleteKey(&container, CU8"SECOND"));
+  assert(NULL != findString(&container, CU8"FIRST", NULL));
+  assert(NULL == findString(&container, CU8"SECOND", NULL));
+  assert(NULL != findString(&container, CU8"THIRD", NULL));
+
+  /* expect the middle one is removed. */
+  encodeContainer(&container, sizeof(buf), buf, &generated);
+  assert(sizeof(expected) == generated);
+  assert(!memcmp(expected, buf, generated));
+
+  /* still good if we delete all */
+  assert(VPD_OK == deleteKey(&container, CU8"THIRD"));
+  assert(VPD_OK == deleteKey(&container, CU8"FIRST"));
+
+  /* still good for add */
+  setString(&container, CU8"FORTH", CU8"4", 4);
+  assert(NULL != findString(&container, CU8"FORTH", NULL));
+  setString(&container, CU8"FIFTH", CU8"5", 5);
+  assert(NULL != findString(&container, CU8"FIFTH", NULL));
+
+  printf("[PASS] %s()\n", __FUNCTION__);
+  return TEST_OK;
+}
+
+
+
 int main() {
   assert(TEST_OK == testEncodeLen());
   assert(TEST_OK == testDecodeLen());
@@ -255,6 +370,11 @@ int main() {
   assert(TEST_OK == testEncodeMultiStrings());
   assert(TEST_OK == testContainer());
   assert(TEST_OK == testDecodeVpdString());
+  assert(TEST_OK == testDeleteEmptyContainer());
+  assert(TEST_OK == testDeleteFirstOfOne());
+  assert(TEST_OK == testDeleteFirstOfTwo());
+  assert(TEST_OK == testDeleteSecondOfTwo());
+  assert(TEST_OK == testDeleteSecondOfThree());
 
   printf("SUCCESS!\n");
   return 0;

@@ -795,6 +795,7 @@ static void usage(const char *progname) {
   printf("      --sh             Dump content for shell script.\n");
   printf("      -O               Overwrite and re-format VPD partition.\n");
   printf("      -g <key>         Print value string only.\n");
+  printf("      -d <key>         Delete a key.\n");
   printf("\n");
 }
 
@@ -802,7 +803,7 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   int retval = 0;
-  const char *optstring = "hf:E:s:p:i:lOg:";
+  const char *optstring = "hf:E:s:p:i:lOg:d:";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
@@ -814,6 +815,7 @@ int main(int argc, char *argv[]) {
     {"overwrite", 0, 0, 'O'},
     {"filter", 0, 0, 'g'},
     {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
+    {"delete", 0, 0, 'd'},
     {0, 0, 0, 0}
   };
   char *filename = NULL;
@@ -822,6 +824,7 @@ int main(int argc, char *argv[]) {
   const char *tmp_part_file = NULL;
   const char *tmp_full_file = NULL;
   uint8_t *filter_str = NULL;
+  uint8_t *to_delete = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
@@ -897,6 +900,16 @@ int main(int argc, char *argv[]) {
         filter_str = (uint8_t*)strdup(optarg);
         break;
 
+      case 'd':
+        if (to_delete) {
+          fprintf(stderr, "Cannot specify more than one delete key "
+                          "(first: '%s', second: '%s')\n", to_delete, optarg);
+          retval = 1;
+          goto teardown;
+        }
+        to_delete = (uint8_t*)strdup(optarg);
+        break;
+
       case 0:
         break;
 
@@ -957,7 +970,17 @@ int main(int argc, char *argv[]) {
 
   if ((retval = loadFile(load_file, &file, overwrite_it))) {
     fprintf(stderr, "loadFile('%s') error.\n", load_file);
+    retval = 1;
     goto teardown;
+  }
+
+  if (to_delete) {
+    if (VPD_OK != deleteKey(&file, to_delete)) {
+      fprintf(stderr, "Cannot delete key '%s'\n", to_delete);
+      retval = 1;
+      goto teardown;
+    }
+    modified++;
   }
 
   mergeContainer(&file, &argument);
@@ -1001,13 +1024,14 @@ int main(int argc, char *argv[]) {
 
   if (modified) {
     if (file_flag & HAS_VPD_1_2) {
-      retval = 1;
       fprintf(stderr, "[ERROR] Writing VPD 1.2 not supported yet.\n");
+      retval = 1;
       goto teardown;
     }
 
     if ((retval = saveFile(&file, save_file, write_back_to_flash))) {
       fprintf(stderr, "saveFile('%s') error.\n", filename);
+      retval = 1;
       goto teardown;
     }
 
@@ -1024,6 +1048,7 @@ int main(int argc, char *argv[]) {
 teardown:
   if (spd_data) free(spd_data);
   if (filename) free(filename);
+  if (to_delete) free(to_delete);
   if (filter_str) free(filter_str);
   destroyContainer(&file);
   destroyContainer(&argument);
