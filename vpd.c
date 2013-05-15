@@ -246,7 +246,11 @@ int parseString(const uint8_t *string) {
   int retval = VPD_OK;
 
   key = (uint8_t*)strdup((char*)string);
+  if (!key || key[0] == '=') return VPD_FAIL;
+
   key = (uint8_t*)strtok((char*)key, "=");
+  if (!key) return VPD_FAIL;
+
   /* We accept empty value: "KEY=" */
   if (!(value = (uint8_t*)strtok(NULL, "=")))
     value = (uint8_t*)"";
