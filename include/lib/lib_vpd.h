@@ -156,6 +156,11 @@ void setString(struct PairContainer *container,
 void mergeContainer(struct PairContainer *dst,
                     const struct PairContainer *src);
 
+/* subtract src from dst.
+*/
+int subtractContainer(struct PairContainer *dst,
+                      const struct PairContainer *src);
+
 /* Given a container, encode its all entries into the buffer.
  */
 int encodeContainer(const struct PairContainer *container,
@@ -176,6 +181,10 @@ int setContainerFilter(struct PairContainer *container,
 int deleteKey(struct PairContainer *container,
               const uint8_t *key);
 
+/*
+ * Returns number of pairs in container.
+ */
+int lenOfContainer(const struct PairContainer *container);
 
 /*
  * Export the container content with human-readable text.

@@ -36,3 +36,6 @@ all: test
 
 test:
 	./test_seg_fault.sh
+	./test_multi_add_del.sh
+
+	@echo "SUCCESS!"
