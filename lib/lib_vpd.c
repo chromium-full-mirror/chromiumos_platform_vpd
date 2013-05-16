@@ -331,6 +331,21 @@ int deleteKey(struct PairContainer *container,
 }
 
 
+/*
+ * Returns number of pairs in container.
+ */
+int lenOfContainer(const struct PairContainer *container) {
+  int count;
+  struct StringPair *current;
+
+  for (count = 0, current = container->first;
+       current;
+       count++, current = current->next);
+
+  return count;
+}
+
+
 /* Iterate src container and setString() in dst.
  * so that if key is duplicate, the one in dst is overwritten.
  */
@@ -342,6 +357,21 @@ void mergeContainer(struct PairContainer *dst,
     setString(dst, current->key, current->value, current->pad_len);
   }
 }
+
+
+int subtractContainer(struct PairContainer *dst,
+                       const struct PairContainer *src) {
+  struct StringPair *current;
+  int count = 0;
+
+  for (current = src->first; current; current = current->next) {
+    if (VPD_OK == deleteKey(dst, current->key))
+      count++;
+  }
+
+  return count;
+}
+
 
 int encodeContainer(const struct PairContainer *container,
                     const int max_buf_len,

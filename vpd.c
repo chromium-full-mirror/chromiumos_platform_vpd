@@ -54,7 +54,8 @@ enum FileFlag {
  *   argument:  stores parsed pairs from command arguments.
  */
 struct PairContainer file;
-struct PairContainer argument;
+struct PairContainer set_argument;
+struct PairContainer del_argument;
 
 int export_type = VPD_EXPORT_KEY_VALUE;
 
@@ -255,7 +256,7 @@ int parseString(const uint8_t *string) {
   if (!(value = (uint8_t*)strtok(NULL, "=")))
     value = (uint8_t*)"";
 
-  setString(&argument, key, value, pad_value_len);
+  setString(&set_argument, key, value, pad_value_len);
 
   free(key);
   return retval;
@@ -801,6 +802,11 @@ static void usage(const char *progname) {
   printf("      -g <key>         Print value string only.\n");
   printf("      -d <key>         Delete a key.\n");
   printf("\n");
+  printf("   Notes:\n");
+  printf("      You can specify multiple -s and -d. However, vpd always\n");
+  printf("         applies -s first, then -d.\n");
+  printf("      -g and -l must be mutually exclusive.\n");
+  printf("\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -828,14 +834,14 @@ int main(int argc, char *argv[]) {
   const char *tmp_part_file = NULL;
   const char *tmp_full_file = NULL;
   uint8_t *filter_str = NULL;
-  uint8_t *to_delete = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
   int modified = 0;
 
   initContainer(&file);
-  initContainer(&argument);
+  initContainer(&set_argument);
+  initContainer(&del_argument);
 
   while ((opt = getopt_long(argc, argv, optstring,
                             long_options, &option_index)) != EOF) {
@@ -870,7 +876,6 @@ int main(int argc, char *argv[]) {
           retval = 1;
           goto teardown;
         }
-        modified++;
         break;
 
       case 'p':
@@ -905,13 +910,10 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'd':
-        if (to_delete) {
-          fprintf(stderr, "Cannot specify more than one delete key "
-                          "(first: '%s', second: '%s')\n", to_delete, optarg);
-          retval = 1;
-          goto teardown;
-        }
-        to_delete = (uint8_t*)strdup(optarg);
+        /* Add key into container for delete. Since value is non-sense,
+         * keep it empty. */
+        setString(&del_argument, (const uint8_t *)optarg,
+                                 (const uint8_t *)"", 0);
         break;
 
       case 0:
@@ -978,16 +980,21 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  if (to_delete) {
-    if (VPD_OK != deleteKey(&file, to_delete)) {
-      fprintf(stderr, "Cannot delete key '%s'\n", to_delete);
-      retval = 1;
-      goto teardown;
-    }
+  /* Do -s */
+  if (lenOfContainer(&set_argument) > 0) {
+    mergeContainer(&file, &set_argument);
     modified++;
   }
 
-  mergeContainer(&file, &argument);
+  /* Do -d */
+  if (subtractContainer(&file, &del_argument) !=
+      lenOfContainer(&del_argument)) {
+    fprintf(stderr, "At least one of key is not existed.\n");
+    retval = 1;
+    goto teardown;
+  } else {
+    modified++;
+  }
 
   if (list_it || filter_str) {
     /* Reserve larger size because the exporting generates longer string than
@@ -1052,10 +1059,10 @@ int main(int argc, char *argv[]) {
 teardown:
   if (spd_data) free(spd_data);
   if (filename) free(filename);
-  if (to_delete) free(to_delete);
   if (filter_str) free(filter_str);
   destroyContainer(&file);
-  destroyContainer(&argument);
+  destroyContainer(&set_argument);
+  destroyContainer(&del_argument);
   cleanTempFiles();
 
   return retval;

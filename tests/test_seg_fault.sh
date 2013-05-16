@@ -35,89 +35,49 @@
 # Software Foundation.
 set -e
 
-clean_up() {
-  rm -rf $TMP_DIR
-}
-
-die() {
-  echo $1
-  exit 1
-}
+. ./functions.sh
 
 BINARY="../vpd"
 TMP_DIR=$(mktemp -d)
 BIOS_PACK="empty.vpd.tbz"
 BIOS="$TMP_DIR/empty.vpd"
 
-# $1: the tbz file
-# $2: target directory
-unpack_bios() {
-  tar -jxf $1 -C $2
-}
-
 unpack_bios $BIOS_PACK $TMP_DIR
 
 #
 # Test -s= (empty key) case.
 # Expect return 1 for invalid parameter.
-$BINARY -f $BIOS -s=  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 1 ]]; then
-  exit $rc
-fi
+RUN 1 "$BINARY -f $BIOS -s="
 
 #
 # Test -s=DEF (empty key) case.
 # Expect return 1 for invalid parameter.
-$BINARY -f $BIOS -s=DEF  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 1 ]]; then
-  exit $rc
-fi
+RUN 1 "$BINARY -f $BIOS -s=DEF"
 
 #
 # Test -sABC= (empty value) case.
 # Expect SUCCESS
-$BINARY -f $BIOS -sABC=  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 0 ]]; then
-  exit $rc
-fi
+RUN 0 "$BINARY -f $BIOS -sABC="
 # Make sure ABC has been set
-$BINARY -f $BIOS -l | grep ABC  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 0 ]]; then
-  exit $rc
-fi
+RUN 0 "$BINARY -f $BIOS -l | grep ABC"
 
 #
 # Test -sABC=DEF case.
 # Expect SUCCESS
-$BINARY -f $BIOS -sABC=DEF  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 0 ]]; then
-  exit $rc
-fi
+RUN 0 "$BINARY -f $BIOS -sABC=DEF"
 # Make sure ABC has been set
-$BINARY -f $BIOS -l | grep DEF  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 0 ]]; then
-  exit $rc
-fi
+RUN 0 "$BINARY -f $BIOS -l | grep DEF"
 
 #
 # Test -d DEF case.
 # expect return 1 because non-existed key
-$BINARY -f $BIOS -d DEF  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 1 ]]; then
-  exit $rc
-fi
+RUN 1 "$BINARY -f $BIOS -d DEF"
 
 #
 # Test -d ABC case.
 # expect SUCCESS and nothing left.
-$BINARY -f $BIOS -d ABC  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 0 ]]; then
-  exit $rc
-fi
-$BINARY -f $BIOS -l | grep -e ".*"  &> /dev/null && rc=$? || rc=$?
-if [[ $rc != 1 ]]; then
-  exit $rc
-fi
+RUN 0 "$BINARY -f $BIOS -d ABC"
+RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
 
 
 clean_up
