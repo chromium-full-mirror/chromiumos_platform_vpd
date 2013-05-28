@@ -838,6 +838,7 @@ int main(int argc, char *argv[]) {
   int list_it = 0;
   int overwrite_it = 0;
   int modified = 0;
+  int num_to_delete;
 
   initContainer(&file);
   initContainer(&set_argument);
@@ -987,12 +988,13 @@ int main(int argc, char *argv[]) {
   }
 
   /* Do -d */
+  num_to_delete = lenOfContainer(&del_argument);
   if (subtractContainer(&file, &del_argument) !=
-      lenOfContainer(&del_argument)) {
+      num_to_delete) {
     fprintf(stderr, "At least one of key is not existed.\n");
     retval = 1;
     goto teardown;
-  } else {
+  } else if (num_to_delete > 0) {
     modified++;
   }
 

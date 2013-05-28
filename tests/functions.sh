@@ -36,20 +36,20 @@
 set -e
 
 clean_up() {
-  rm -rf $TMP_DIR
+  rm -rf "$TMP_DIR"
 }
 
 # $1: the tbz file
 # $2: target directory
 unpack_bios() {
-  tar -axf $1 -C $2
+  tar -axf "$1" -C "$2"
 }
 
 #
 # die $3 if $1 != $2
 #
 EXPECT_EQ() {
-  if [ $1 != $2 ]; then
+  if [ "$1" != "$2" ]; then
     echo "[FAIL] EXPECT_EQ(expect:$1 exact:$2): $3"
     exit 1
   fi
@@ -64,4 +64,15 @@ RUN() {
   eval "$2" >/dev/null 2>&1 && rc=$? || rc=$?
 
   EXPECT_EQ "$rc" "$1" "$2"
+}
+
+#
+# Get a finger print of a file (to ensure the file hasn't been written).
+#
+mtime() {
+  echo $(stat -c "%Y" $1)
+}
+
+chksum() {
+  echo $(md5sum $1)
 }
