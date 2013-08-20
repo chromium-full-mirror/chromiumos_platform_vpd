@@ -40,7 +40,7 @@ static uint8_t flashrom_cmd[] = "flashrom";
  *   bus=spi: The VPD data are stored in BIOS flash, which is attached
  *            to the SPI bus.
  */
-static uint8_t flashrom_arguments[] = " -p internal:bus=spi ";
+static uint8_t flashrom_arguments[] = " -p host ";
 
 int flashromFullRead(const char* full_file) {
   char cmd[CMD_BUF_SIZE];

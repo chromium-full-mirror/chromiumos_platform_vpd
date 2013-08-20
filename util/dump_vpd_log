@@ -209,8 +209,8 @@ set_world_enterable "${CACHE_DIR}"
 
 # If the cache file is missing, generate it.
 if [ ! -f ${CACHE_FILE} ]; then
-  args_partial="-p internal:bus=spi -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
-  args_whole="-p internal:bus=spi -r ${BIOS_TMP}"
+  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
+  args_whole="-p host -r ${BIOS_TMP}"
   if [ -n "${debug_log}" ]; then
     echo "-------------------" $(date) >> "${debug_log}"
     flashrom ${args_partial} -V -V -V >> "${debug_log}" 2>&1 ||
