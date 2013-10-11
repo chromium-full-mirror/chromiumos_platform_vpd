@@ -244,7 +244,8 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
     initial_timezone
     ActivateDate
     model_name
-    sku_number"
+    sku_number
+    region"
   sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < ${CACHE_FILE} \
     > ${FILTERED_TMP}
 
