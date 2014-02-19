@@ -242,6 +242,8 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
     initial_locale
     keyboard_layout
     initial_timezone
+    customization_id
+    rlz_brand_code
     ActivateDate
     model_name
     sku_number
