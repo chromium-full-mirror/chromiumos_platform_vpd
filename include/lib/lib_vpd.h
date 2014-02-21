@@ -31,7 +31,12 @@ enum {  /* export_type */
   VPD_EXPORT_AS_PARAMETER,
 };
 
+/* Callback for decodeVpdString to invoke. */
+typedef int VpdDecodeCallback(const uint8_t *key, int32_t key_len,
+                              const uint8_t *value, int32_t value_len,
+                              void *arg);
 
+/* Container data types */
 struct StringPair {
   uint8_t *key;
   uint8_t *value;
@@ -44,6 +49,10 @@ struct PairContainer {
   struct StringPair *first;
 };
 
+
+/***********************************************************************
+ * Encode and decode VPD entries
+ ***********************************************************************/
 
 /* Encodes the len into multiple bytes with the following format.
  *
@@ -118,21 +127,24 @@ int encodeVpdString(
     int *generated_len);
 
 
-/* Given the encoded string, this function consumes a pair of {len, key, value}.
- * The result will be added into the container. The *consumed will be plused
- * the number of bytes consumed in this function.
+/* Given the encoded string, this function invokes callback with extracted
+ * (key, value). The *consumed will be plused the number of bytes consumed in
+ * this function.
  *
  * The input_buf points to the first byte of the input buffer.
  *
  * The *consumed starts from 0, which is actually the next byte to be decoded.
  * It can be non-zero to be used in multiple calls.
+ *
+ * If one entry is successfully decoded, sends it to callback and returns the
+ * result.
  */
 int decodeVpdString(
     const int32_t max_len,
     const uint8_t *input_buf,
-    struct PairContainer *container,
-    int32_t *consumed);
-
+    int32_t *consumed,
+    VpdDecodeCallback callback,
+    void *callback_arg);
 
 /***********************************************************************
  * Container helpers
@@ -168,6 +180,13 @@ int encodeContainer(const struct PairContainer *container,
                     uint8_t *buf,
                     int *generated);
 
+/* Given a VPD blob, decode its entries and push into container.
+ */
+int decodeToContainer(struct PairContainer *container,
+                      const int32_t max_len,
+                      const uint8_t *input_buf,
+                      int32_t *consumed);
+
 /* Set filter for exporting functions.
  * If filter is NULL, resets the filter so that everything can be exported.
  */
@@ -202,6 +221,5 @@ int exportContainer(const int export_type,
                     int *generated);
 
 void destroyContainer(struct PairContainer *container);
-
 
 #endif  /* __LIB_VPD__ */

@@ -34,31 +34,45 @@
 
 CC?=cc
 VERSION := $(shell ./util/getversion.sh)
-CFLAGS+=-g -Iinclude/ -Werror -Wall -D'VPD_VERSION="$(VERSION)"'
+CFLAGS+=-g -Iinclude/ -Iinclude/lib -Werror -Wall -D'VPD_VERSION="$(VERSION)"'
 LDFLAGS+=-luuid
 BINARY=vpd
+STATIC_BINARY=vpd_s
+TEST_BINARY=vpd_test
+BINS=$(BINARY) $(TEST_BINARY) $(STATIC_BINARY)
 
-OBJS=	lib/flashrom.o \
+LIB_OBJS= \
+	lib/flashrom.o \
 	lib/fmap.o \
 	lib/lib_smbios.o \
-	lib/lib_vpd.o \
-	lib/math.o \
-	vpd.o
+	lib/vpd_container.o \
+	lib/vpd_decode.o \
+	lib/vpd_encode.o \
+	lib/math.o
 
-all: $(BINARY)
+TEST_OBJS= \
+	lib/lib_vpd_test.o
+
+OBJS = $(LIB_OBJS) vpd.o
+
+all: $(BINS)
 
 $(BINARY): $(OBJS)
-	$(CC) $(CFLAGS) -o vpd $(OBJS) -luuid
-	$(CC) $(CFLAGS) -static -o vpd_s $(OBJS) -luuid
+	$(CC) -o $@ $? $(LDFLAGS)
 
-test: $(BINARY)
-  # library level test
-	$(CC) $(CFLAGS) -o lib/lib_vpd_test.o -c lib/lib_vpd_test.c
-	$(CC) $(CFLAGS) -o vpd_test lib/lib_vpd.o lib/lib_vpd_test.o
-	./vpd_test
+$(STATIC_BINARY): $(OBJS)
+	$(CC) -static -o $@ $? $(LDFLAGS)
 
+$(TEST_BINARY): $(TEST_OBJS) $(LIB_OBJS)
+	# library level test
+	$(CC) -o $@ $? $(LDFLAGS)
+
+test:	$(BINS)
+	./$(TEST_BINARY)
 	# test cases for vpd executable
 	make -C tests
 
 clean:
-	rm -f *.o lib/*.o vpd vpd_test
+	rm -f $(OBJS) $(TEST_OBJS) $(BINS)
+
+.PHONY: clean test all

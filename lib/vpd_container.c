@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
+ * Copyright (c) 2014 The Chromium OS Authors. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  *
@@ -14,212 +14,6 @@
 #ifndef MIN
 #define MIN(a, b) ((a < b) ? a : b)
 #endif
-
-
-/* Encodes the len into multiple bytes with the following format.
- *
- *    7   6 ............ 0
- *  +----+------------------+
- *  |More|      Length      |  ...
- *  +----+------------------+
- *
- * Returns fail if the buffer is not long enough.
- */
-int encodeLen(
-    const int32_t len,
-    uint8_t *encode_buf,
-    const int32_t max_len,
-    int32_t *encoded_len) {
-  unsigned int shifting;
-  unsigned int reversed_7bits = 0;
-  int out_index = 0;
-
-  assert(encoded_len);
-
-  if (len < 0) return VPD_FAIL;
-  shifting = len;
-  /* reverse the len for every 7-bit. The little endian. */
-  for (*encoded_len = 0; shifting; (*encoded_len)++) {
-    reversed_7bits = (reversed_7bits << 7) | (shifting & 0x7f);
-    shifting >>= 7;
-  }
-  if (*encoded_len > max_len) return VPD_FAIL;
-  if (!*encoded_len) *encoded_len = 1;  /* output at least 1 byte */
-
-  /* Output in reverse order, now big endian. */
-  while (out_index < *encoded_len) {
-    /* always set MORE flag */
-    encode_buf[out_index++] = 0x80 | (reversed_7bits & 0x7f);
-    reversed_7bits >>= 7;
-  }
-  encode_buf[out_index - 1] &= 0x7f;  /* clear the MORE flag in last byte */
-
-  return VPD_OK;
-}
-
-
-int decodeLen(
-    const int32_t max_len,
-    const uint8_t *in,
-    int32_t *length,
-    int32_t *decoded_len) {
-  uint8_t more;
-  int i = 0;
-
-  assert(length);
-  assert(decoded_len);
-
-  *length = 0;
-  do {
-    if (i >= max_len) return VPD_FAIL;
-    more = in[i] & 0x80;
-    *length <<= 7;
-    *length |= in[i] & 0x7f;
-    ++i;
-  } while (more);
-
-  *decoded_len = i;
-
-  return VPD_OK;
-}
-
-
-/*  Encodes the terminator.
- */
-int encodeVpdTerminator(
-    const int max_buffer_len,
-    uint8_t *output_buf,
-    int *generated_len) {
-  assert(generated_len);
-
-  if (*generated_len >= max_buffer_len) return VPD_FAIL;
-
-  output_buf += *generated_len;  /* move cursor to end of string */
-  *(output_buf++) = VPD_TYPE_TERMINATOR;
-  (*generated_len)++;
-
-  return VPD_OK;
-}
-
-/* Encodes a string with padding support. */
-int encodeVpdString(
-    const uint8_t *key,
-    const uint8_t *value,
-    const int pad_value_len,
-    const int max_buffer_len,
-    uint8_t *output_buf,
-    int *generated_len) {
-  int key_len, value_len;
-  int ret_len;
-  int pad_len = 0;
-
-  assert(generated_len);
-
-  key_len = strlen((char*)key);
-  value_len = strlen((char*)value);
-  output_buf += *generated_len;  /* move cursor to end of string */
-
-  /* encode type */
-  if (*generated_len >= max_buffer_len) return VPD_FAIL;
-  *(output_buf++) = VPD_TYPE_STRING;
-  (*generated_len)++;
-
-  /* encode key len */
-  if (VPD_OK != encodeLen(key_len, output_buf,
-                          max_buffer_len - *generated_len, &ret_len))
-    return VPD_FAIL;
-  output_buf += ret_len;
-  *generated_len += ret_len;
-  /* encode key string */
-  if (*generated_len + key_len > max_buffer_len) return VPD_FAIL;
-  memcpy(output_buf, key, key_len);
-  output_buf += key_len;
-  *generated_len += key_len;
-
-  /* count padding length */
-  if (pad_value_len != VPD_AS_LONG_AS) {
-    if (value_len < pad_value_len) {
-      pad_len = pad_value_len - value_len;
-    } else {
-      value_len = pad_value_len;
-    }
-  }
-
-  /* encode value len */
-  if (VPD_OK != encodeLen(value_len + pad_len, output_buf,
-                          max_buffer_len - *generated_len, &ret_len))
-    return VPD_FAIL;
-  output_buf += ret_len;
-  *generated_len += ret_len;
-  /* encode value string */
-  if (*generated_len + value_len > max_buffer_len) return VPD_FAIL;
-  memcpy(output_buf, value, value_len);
-  output_buf += value_len;
-  *generated_len += value_len;
-  /* encode padding (if applicable) */
-  if (*generated_len + pad_len > max_buffer_len) return VPD_FAIL;
-  memset(output_buf, 0, pad_len);
-  output_buf += pad_len;
-  *generated_len += pad_len;
-
-  return VPD_OK;
-}
-
-
-/* Sequentially decodes type, key, and value.
- */
-int decodeVpdString(
-    const int32_t max_len,
-    const uint8_t *input_buf,
-    struct PairContainer *container,
-    int32_t *consumed) {
-  int type;
-  int32_t length;
-  int32_t decoded_len;
-  uint8_t *key, *value;
-
-  /* type */
-  if (*consumed >= max_len) return VPD_FAIL;
-  type = input_buf[*consumed];
-  switch (type) {
-    case VPD_TYPE_STRING:
-      (*consumed)++;
-
-      /* key */
-      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
-                              &length, &decoded_len)) {
-        return VPD_FAIL;
-      }
-      *consumed += decoded_len;
-
-      key = malloc(length + 1);
-      assert(key);
-      strncpy((char*)key, (char*)&input_buf[*consumed], length);
-      key[length] = '\0';
-      *consumed += length;
-
-      /* value */
-      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
-                              &length, &decoded_len)) {
-        return VPD_FAIL;
-      }
-      *consumed += decoded_len;
-
-      value = malloc(length + 1);
-      assert(value);
-      strncpy((char*)value, (char*)&input_buf[*consumed], length);
-      value[length] = '\0';
-      *consumed += length;
-
-      /* Add it into container */
-      setString(container, key, value, length);
-      break;
-    default:
-      return VPD_FAIL;
-      break;
-  }
-  return VPD_OK;
-}
 
 
 /***********************************************************************
@@ -390,6 +184,29 @@ int encodeContainer(const struct PairContainer *container,
     }
   }
   return VPD_OK;
+}
+
+static int callbackDecodeToContainer(const uint8_t *key, int32_t key_len,
+                                     const uint8_t *value, int32_t value_len,
+                                     void *arg) {
+  struct PairContainer *container = (struct PairContainer*)arg;
+  uint8_t *key_string = (uint8_t*)malloc(key_len + 1),
+          *value_string = (uint8_t*)malloc(value_len + 1);
+  assert(key_string && value_string);
+  memcpy(key_string, key, key_len);
+  memcpy(value_string, value, value_len);
+  key_string[key_len] = '\0';
+  value_string[value_len] = '\0';
+  setString(container, key_string, value_string, value_len);
+  return VPD_OK;
+}
+
+int decodeToContainer(struct PairContainer *container,
+                      const int32_t max_len,
+                      const uint8_t *input_buf,
+                      int32_t *consumed) {
+  return decodeVpdString(max_len, input_buf, consumed,
+                         callbackDecodeToContainer, (void*)container);
 }
 
 int setContainerFilter(struct PairContainer *container,

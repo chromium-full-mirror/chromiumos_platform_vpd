@@ -619,8 +619,9 @@ int loadFile(const char *filename, struct PairContainer *container,
       for (;
            vpd_buf[index] != VPD_TYPE_TERMINATOR &&
            vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-        if (VPD_OK != decodeVpdString(file_size, vpd_buf, container, &index)) {
-          fprintf(stderr, "decodeVpdString() error.\n");
+        if (VPD_OK != decodeToContainer(container, file_size, vpd_buf, &index))
+        {
+          fprintf(stderr, "decodeToContainer() error.\n");
           retval = 1;
           goto teardown;
         }

@@ -223,8 +223,8 @@ int testDecodeVpdString() {
   struct PairContainer container;
 
   initContainer(&container);
-  assert(VPD_OK == decodeVpdString(sizeof(expected), expected,
-                                   &container, &consumed));
+  assert(VPD_OK == decodeToContainer(&container, sizeof(expected), expected,
+                                     &consumed));
   assert(sizeof(expected) == consumed);
 
   consumed = 0;
