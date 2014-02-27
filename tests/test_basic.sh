@@ -39,69 +39,82 @@ set -e
 
 BINARY="../vpd"
 TMP_DIR=$(mktemp -d)
-BIOS_PACK="empty.vpd.tbz"
+BIOS_PACKS="vpd_0x600.tbz gVpdInfo.tbz"
 BIOS="$TMP_DIR/empty.vpd"
 
-unpack_bios $BIOS_PACK $TMP_DIR
+test_image() {
+  local pack="$1"
 
-#
-# List only
-# Expect SUCCESS and the mtime is NOT changed
-org_mtime=$(mtime $BIOS)
-org_chksum=$(chksum $BIOS)
-sleep 2  # ensure the system has changed.
-RUN 0 "$BINARY -f $BIOS -l"
-new_mtime=$(mtime $BIOS)
-new_chksum=$(chksum $BIOS)
-EXPECT_EQ "$org_mtime" "$new_mtime" \
-          "The file mtime has been modified unexpectedly."
-EXPECT_EQ "$org_chksum" "$new_chksum" \
-          "The file content has been modified unexpectedly."
+  echo "  testing '$pack' ..."
+  unpack_bios $pack $TMP_DIR
 
-#
-# -O to reset all
-# expect SUCCESS and nothing exists
-RUN 0 "$BINARY -f $BIOS -O"
-RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  #
+  # List only
+  # Expect SUCCESS and the mtime is NOT changed
+  org_mtime=$(mtime $BIOS)
+  org_chksum=$(chksum $BIOS)
+  sleep 2  # ensure the system has changed.
+  RUN 0 "$BINARY -f $BIOS -l"
+  new_mtime=$(mtime $BIOS)
+  new_chksum=$(chksum $BIOS)
+  EXPECT_EQ "$org_mtime" "$new_mtime" \
+            "The file mtime has been modified unexpectedly."
+  EXPECT_EQ "$org_chksum" "$new_chksum" \
+            "The file content has been modified unexpectedly."
 
-#
-# Add one string
-# Expect SUCCESS
-RUN 0 "$BINARY -f $BIOS -s ABC=DEF"
-# Make sure ABC has been added
-RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep DEF"
-# Check format, expect the key string is in front of value string
-RUN 0 "$BINARY -f $BIOS -l | grep -r 'ABC.*DEF'"
+  #
+  # -O to reset all
+  # expect SUCCESS and nothing exists
+  RUN 0 "$BINARY -f $BIOS -O"
+  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
 
-#
-# Test replacement
-RUN 0 "$BINARY -f $BIOS -s ABC=123"
-# Make sure ABC has been replaced
-RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep 123"
+  #
+  # Add one string
+  # Expect SUCCESS
+  RUN 0 "$BINARY -f $BIOS -s ABC=DEF"
+  # Make sure ABC has been added
+  RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep DEF"
+  # Check format, expect the key string is in front of value string
+  RUN 0 "$BINARY -f $BIOS -l | grep -r 'ABC.*DEF'"
 
-#
-# Test -d NONE
-# expect return 1 because non-existed key
-RUN 1 "$BINARY -f $BIOS -d NONE"
+  #
+  # Test replacement
+  RUN 0 "$BINARY -f $BIOS -s ABC=123"
+  # Make sure ABC has been replaced
+  RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep 123"
 
-#
-# Delete single.
-# expect SUCCESS and nothing left.
-RUN 0 "$BINARY -f $BIOS -d ABC"
-RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  #
+  # Test -d NONE
+  # expect return 1 because non-existed key
+  RUN 1 "$BINARY -f $BIOS -d NONE"
 
-#
-# Test -O and -s at the same command
-# expect SUCCESS and new key has been added
-RUN 0 "$BINARY -f $BIOS -O -s 5566=183"
-RUN 0 "$BINARY -f $BIOS -l | grep 5566 | grep 183"
+  #
+  # Delete single.
+  # expect SUCCESS and nothing left.
+  RUN 0 "$BINARY -f $BIOS -d ABC"
+  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
 
-#
-# -O to reset all
-# expect SUCCESS and nothing exists
-RUN 0 "$BINARY -f $BIOS -O"
-RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  #
+  # Test -O and -s at the same command
+  # expect SUCCESS and new key has been added
+  RUN 0 "$BINARY -f $BIOS -O -s 5566=183"
+  RUN 0 "$BINARY -f $BIOS -l | grep 5566 | grep 183"
 
+  #
+  # -O to reset all
+  # expect SUCCESS and nothing exists
+  RUN 0 "$BINARY -f $BIOS -O"
+  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+}
+
+main() {
+  for pack in $BIOS_PACKS
+  do
+    test_image "$pack"
+  done
+}
+
+main
 clean_up
 
 exit 0

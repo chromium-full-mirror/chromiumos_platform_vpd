@@ -186,10 +186,16 @@ int buildEpsAndTables(
   }
   num_structures++;
 
+  /*
+   * TODO(hungte) Once most systems have been updated to support VPD_INFO
+   * record, we can remove the +sizeof(google_vpd_info) hack.
+   */
+
   /* Generate type 241 - VPD 2.0 */
   table_len = vpd_append_type241(1, &table, table_len,
                                  GOOGLE_VPD_2_0_UUID,
-                                 eps_base + GOOGLE_VPD_2_0_OFFSET,
+                                 (eps_base + GOOGLE_VPD_2_0_OFFSET +
+                                  sizeof(struct google_vpd_info)),
                                  size_blob,
                                  GOOGLE_VPD_2_0_VENDOR,
                                  GOOGLE_VPD_2_0_DESCRIPTION,
@@ -701,8 +707,14 @@ int saveFile(const struct PairContainer *container, const char *filename,
   int eps_len = 0;
   int retval = 0;
   uint32_t file_seek;
+  struct google_vpd_info *info = (struct google_vpd_info *)buf;
 
   memset(eps, 0xff, sizeof(eps));
+  buf_len = sizeof(*info);
+
+  /* prepare info */
+  memset(info, 0, sizeof(*info));
+  memcpy(info->header.magic, VPD_INFO_MAGIC, sizeof(info->header.magic));
 
   /* encode into buffer */
   if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
@@ -715,6 +727,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
     retval = 1;
     goto teardown;
   }
+  info->size = buf_len - sizeof(*info);
 
   if (VPD_OK != buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len)) {
     fprintf(stderr, "Cannot build EPS.\n");

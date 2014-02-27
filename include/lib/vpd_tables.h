@@ -1,19 +1,7 @@
 /*
- * Copyright (C) 2010 Google Inc.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ * Copyright (c) 2014 The Chromium OS Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  *
  * Ported from mosys project (http://code.google.com/p/mosys/).
  */
@@ -24,6 +12,27 @@
 #include <inttypes.h>
 
 #define VPD_ENTRY_MAGIC    "_SM_"
+#define VPD_INFO_MAGIC     \
+  "\xfe"      /* type: VPD header */       \
+  "\x09"      /* key length, 9 = 1 + 8 */  \
+  "\x01"      /* info version, 1 */        \
+  "gVpdInfo"  /* signature, 8 bytes */ \
+  "\x04"      /* value length */
+
+/* Google specific VPD info */
+struct google_vpd_info {
+  union {
+    struct {
+      uint8_t type;
+      uint8_t key_len;
+      uint8_t info_ver;
+      uint8_t signature[8];
+      uint8_t value_len;
+    } tlv;
+    uint8_t magic[12];
+  } header;
+  uint32_t size;
+} __attribute__((packed));
 
 /* Entry */
 struct vpd_entry {
