@@ -62,6 +62,7 @@ void fmapNormalizeAreaName(char *name) {
 off_t fmapFind(const uint8_t *image, size_t image_len) {
   off_t offset;
   uint64_t sig;
+  const struct fmap *header;
 
   assert(sizeof(sig) == strlen(FMAP_SIGNATURE));
   memcpy(&sig, FMAP_SIGNATURE, strlen(FMAP_SIGNATURE));
@@ -71,16 +72,18 @@ off_t fmapFind(const uint8_t *image, size_t image_len) {
    * fmap 1.01 changes to use 64-byte alignment, but 1.00 used 4-byte.
    * For backward-compatible, uses 4-byte alignment to search.
    */
-  for (offset = 0; offset + sizeof(sig) <= image_len; offset += 4) {
-    if (0 == memcmp(&image[offset], &sig, sizeof(sig))) {
-      break;
+  for (offset = 0; offset + sizeof(*header) <= image_len; offset += 4) {
+    if (0 != memcmp(&image[offset], &sig, sizeof(sig))) {
+      continue;
     }
+    header = (const struct fmap *)(&image[offset]);
+    if (header->ver_major != FMAP_VER_MAJOR) {
+      continue;
+    }
+    return offset;
   }
 
-  if (offset + sizeof(sig) <= image_len)
-    return offset;
-  else
-    return -1;
+  return -1;
 }
 
 /*
