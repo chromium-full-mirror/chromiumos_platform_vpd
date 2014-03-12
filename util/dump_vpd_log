@@ -30,6 +30,7 @@ CACHE_FILE="${CACHE_DIR}/full-v2.txt"
 CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
 # Location for storing cached ECHO coupon codes.
+ECHO_COUPON_TMP=$(mktemp --tmpdir=/var/tmp)
 ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
 ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
@@ -46,7 +47,7 @@ FILTERED_FILE="${CACHE_DIR}/filtered.txt"
 FILTERED_LINK="/var/log/vpd_2.0.txt"
 
 # Remove the temp file, which has full data if the script terminates early.
-trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP}" EXIT
+trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP} ${ECHO_COUPON_TMP}" EXIT
 
 # Load shflags, define script flags.
 . /usr/share/misc/shflags
@@ -68,8 +69,8 @@ DEFINE_boolean "debug" ${FLAGS_FALSE} \
 # $1: name of file to change ownership/permissions to.
 #
 set_conservative_perm() {
-  chown root:root "$1" || exit 1
-  chmod go-stwx "$1" || exit 1
+  chown root:root "$1"
+  chmod go-stwx "$1"
 }
 
 #
@@ -78,7 +79,7 @@ set_conservative_perm() {
 #
 set_world_readable() {
   set_conservative_perm "$1"
-  chmod ugo+r "$1" || exit 1
+  chmod ugo+r "$1"
 }
 
 #
@@ -86,9 +87,9 @@ set_world_readable() {
 # $1: directory path to set world enterable.
 #
 set_world_enterable() {
-  local dir=$1
+  local dir="$1"
   set_conservative_perm "${dir}"
-  chmod ugo+x "${dir}" || exit 1
+  chmod ugo+x "${dir}"
 }
 
 # Generate a sed filter for VPD output depending on the provided flag.
@@ -97,16 +98,16 @@ set_world_enterable() {
 # $2, $3, ..: (Optional) Each parameter is one whitelisted key.
 generate_sed_filter() {
   local output=''
-  local all_output=$1
+  local all_output="$1"
   shift
-  if [ $all_output -eq ${FLAGS_FALSE} ]; then
+  if [ "$all_output" -eq "${FLAGS_FALSE}" ]; then
     for field in $*; do
-      output=${output}'/^"'${field}'"=/p;'
+      output="${output}"'/^"'"${field}"'"=".*"$/p;'
     done
-    output=${output}'/^.*/d;'
+    output="${output}"'/^.*/d;'
   fi
 
-  echo ${output}
+  echo "${output}"
 }
 
 # Generate the coupon code file containing cached VPD ECHO attributes.
@@ -114,14 +115,29 @@ generate_echo_codes() {
   local echo_code_keys="
     ubind_attribute
     gbind_attribute"
-  mkdir -p "$(dirname ${ECHO_COUPON_FILE})" "$(dirname ${ECHO_COUPON_LINK})"
+  local coupon_dir="$(dirname ${ECHO_COUPON_FILE})"
+  local link_dir="$(dirname ${ECHO_COUPON_LINK})"
+
+  mkdir -p "${coupon_dir}" "${link_dir}"
+  if [ -f "${ECHO_COUPON_FILE}" ]; then
+    return
+  fi
+
+  # If the file exists but isn't regular, it will be removed first.
+  rm -f "${ECHO_COUPON_FILE}"
+  rm -f "${ECHO_COUPON_LINK}"
+
   sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
-    < ${CACHE_FILE} > ${ECHO_COUPON_FILE}
-  # Since chrome needs access to this, the file is readable by user chronos.
+    < "${CACHE_FILE}" > "${ECHO_COUPON_TMP}"
+  mv -n "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
+  set_conservative_perm "${ECHO_COUPON_FILE}"
+
+  # Since chrome needs access to this, the file is readable by group chronos.
   # Note: It should NOT be world readable.
   # TODO(gauravsh): Broker this via debugd. http://crosbug.com/28285
-  chown -R chronos:chronos "$(dirname ${ECHO_COUPON_FILE})" \
-    "$(dirname ${ECHO_COUPON_LINK})"
+  chown -R root:chronos "${coupon_dir}" "${link_dir}"
+  chmod -R g+rx "${coupon_dir}" "${link_dir}"
+  chmod g-x "${ECHO_COUPON_FILE}"
 }
 
 # Invoke the VPD utility for generating full VPD content.
@@ -130,7 +146,7 @@ generate_echo_codes() {
 # $2: partition name
 # $3: file name to append output
 generate_full_text() {
-  (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >> $3
+  (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >> "$3"
 }
 
 # Migrate the legacy file under encrypted partition to be a symlink pointing to
@@ -139,26 +155,26 @@ generate_full_text() {
 # After call, the legacy file becomes symlink (either be pointed to target, or
 # be moved to target).
 migrate() {
-  local legacy=$1
-  local target=$2
+  local legacy="$1"
+  local target="$2"
 
-  if [ -L ${legacy} ]; then
+  if [ -L "${legacy}" ]; then
     return
-  elif [ ! -e ${legacy} ]; then
+  elif [ ! -e "${legacy}" ]; then
     echo -n # create symlink at end of function.
-  elif [ -f ${legacy} ]; then
-    if [ -e ${target} ]; then
-      rm -f ${legacy}
+  elif [ -f "${legacy}" ]; then
+    if [ -e "${target}" ]; then
+      rm -f "${legacy}"
     else
-      mkdir -p $(dirname ${target})
-      mv -f ${legacy} ${target}
+      mkdir -p "$(dirname ${target})"
+      mv -f "${legacy}" "${target}"
     fi
   else
     echo "The type of legacy file ${legacy} cannot be migrated."
     exit 1
   fi
-  mkdir -p $(dirname ${legacy})
-  ln -sf ${target} ${legacy}
+  mkdir -p "$(dirname ${legacy})"
+  ln -sf "${target}" "${legacy}"
 }
 
 
@@ -167,10 +183,11 @@ migrate() {
 #
 
 # Parse arguments.
-FLAGS "$@" || exit 1
+FLAGS "$@"
 eval set -- "${FLAGS_ARGV}"
+set -e
 
-if [ ${FLAGS_debug} -eq ${FLAGS_TRUE} ]; then
+if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
   debug_log="/tmp/dump_vpd_log.debug"
 fi
 
@@ -178,23 +195,25 @@ fi
 # don't have unused VPD data lying around, which takes unnecessary space, might
 # lead to stale VPD log extraction (in case of a script version rollback), and
 # is perceived as a potential security breach.
-rm -f ${OLD_CACHE_FILES}
+for f in ${OLD_CACHE_FILES}; do
+  rm -f "${f}"
+done
 
 # Remove output files if --clean or --force flagged.
-if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} -o \
-     ${FLAGS_force} -eq ${FLAGS_TRUE} ]; then
-  rm -f ${FILTERED_FILE} ${CACHE_FILE} ${ECHO_COUPON_FILE} \
-        ${FILTERED_LINK} ${CACHE_LINK}
+if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} -o \
+     "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
+  rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
+        "${FILTERED_LINK}" "${CACHE_LINK}"
 
   # If --clean was flagged, we're done.
-  if [ ${FLAGS_clean} -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ]; then
     exit 0
   fi
 fi
 
-if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} ]; then
+if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
   FILTERED_TMP=/dev/stdout
-elif [ ${FLAGS_full} -eq ${FLAGS_TRUE} ]; then
+elif [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
   # --full must only be used with --stdout, to prevent accidental dumping of
   # sensitive VPD info into a world-readable file. To be used as follows:
   #
@@ -208,11 +227,13 @@ mkdir -p "${CACHE_DIR}"
 set_world_enterable "${CACHE_DIR}"
 
 # If the cache file is missing, generate it.
-if [ ! -f ${CACHE_FILE} ]; then
+if [ ! -f "${CACHE_FILE}" ]; then
+  # If the file exists, but was not regular.
+  rm -f "${CACHE_FILE}"
   args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
   args_whole="-p host -r ${BIOS_TMP}"
   if [ -n "${debug_log}" ]; then
-    echo "-------------------" $(date) >> "${debug_log}"
+    echo "-------------------" "$(date)" >> "${debug_log}"
     flashrom ${args_partial} -V -V -V >> "${debug_log}" 2>&1 ||
       flashrom ${args_whole} -V -V -V >> "${debug_log}" 2>&1 ||
       exit 1
@@ -222,22 +243,20 @@ if [ ! -f ${CACHE_FILE} ]; then
       exit 1
   fi
 
-  generate_full_text "${BIOS_TMP}" "RO_VPD" ${CACHE_TMP}
-  generate_full_text "${BIOS_TMP}" "RW_VPD" ${CACHE_TMP}
+  generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
+  generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
   mv -f "${CACHE_TMP}" "${CACHE_FILE}"
 
   # Remove existing filtered output file, forcing it to be regenerated.
-  rm -f ${FILTERED_FILE}
+  rm -f "${FILTERED_FILE}"
 fi
 
 # If the ECHO coupon cache is missing, generate it.
-if [ ! -f ${ECHO_COUPON_FILE} ]; then
-  generate_echo_codes
-fi
+generate_echo_codes
 
 # Filter the full VPD output.
-if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
-     ! -f ${FILTERED_FILE} ]; then
+if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
+     ! -f "${FILTERED_FILE}" ]; then
   WHITELIST="
     initial_locale
     keyboard_layout
@@ -248,13 +267,14 @@ if [ ${FLAGS_stdout} -eq ${FLAGS_TRUE} -o \
     model_name
     sku_number
     region"
-  sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < ${CACHE_FILE} \
-    > ${FILTERED_TMP}
+  sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < "${CACHE_FILE}" \
+    > "${FILTERED_TMP}"
 
   # Rename temporary into permanent output if --stdout was not used.
-  if [ ${FLAGS_stdout} -eq ${FLAGS_FALSE} ]; then
-    set_world_readable ${FILTERED_TMP}
-    mv -f ${FILTERED_TMP} ${FILTERED_FILE}
+  if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
+    set_world_readable "${FILTERED_TMP}"
+    rm -f "${FILTERED_FILE}"
+    mv -n "${FILTERED_TMP}" "${FILTERED_FILE}"
   fi
 fi
 
