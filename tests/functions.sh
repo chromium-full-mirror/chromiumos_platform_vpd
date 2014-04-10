@@ -50,7 +50,7 @@ unpack_bios() {
 #
 EXPECT_EQ() {
   if [ "$1" != "$2" ]; then
-    echo "[FAIL] EXPECT_EQ(expect:$1 exact:$2): $3"
+    echo "[FAIL] EXPECT_EQ(expect:$2 exact:$1): $3"
     exit 1
   fi
 }
