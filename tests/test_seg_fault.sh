@@ -49,6 +49,16 @@ test_image() {
   unpack_bios $pack $TMP_DIR
 
   #
+  # Test -s (without parameter) case.
+  # Expect return 1 for invalid parameter.
+  RUN 1 "$BINARY -f $BIOS -s"
+
+  #
+  # Test -s (empty string) case.
+  # Expect return 1 for invalid parameter.
+  RUN 1 "$BINARY -f $BIOS -s ''"
+
+  #
   # Test -s= (empty key) case.
   # Expect return 1 for invalid parameter.
   RUN 1 "$BINARY -f $BIOS -s="

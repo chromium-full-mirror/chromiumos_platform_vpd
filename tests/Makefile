@@ -37,6 +37,7 @@ all: test
 test:
 	./test_basic.sh
 	./test_seg_fault.sh
+	./test_equal.sh
 	./test_multi_add_del.sh
 
 	@echo "SUCCESS!"
