@@ -253,8 +253,10 @@ int parseString(const uint8_t *string) {
   int retval = VPD_OK;
 
   key = (uint8_t*)strdup((char*)string);
-  if (!key || key[0] == '\0' || key[0] == '=')
+  if (!key || key[0] == '\0' || key[0] == '=') {
+    if (key) free(key);
     return VPD_FAIL;
+  }
 
   /*
    * Goes through the key string, and stops at the first '='.
