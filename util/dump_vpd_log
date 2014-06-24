@@ -258,15 +258,16 @@ generate_echo_codes
 if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
      ! -f "${FILTERED_FILE}" ]; then
   WHITELIST="
-    initial_locale
-    keyboard_layout
-    initial_timezone
-    customization_id
-    rlz_brand_code
     ActivateDate
+    customization_id
+    initial_locale
+    initial_timezone
+    keyboard_layout
     model_name
-    sku_number
-    region"
+    panel_backlight_max_nits
+    region
+    rlz_brand_code
+    sku_number"
   sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < "${CACHE_FILE}" \
     > "${FILTERED_TMP}"
 
