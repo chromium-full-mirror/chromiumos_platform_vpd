@@ -23,14 +23,14 @@ BIOS_TMP=$(mktemp)
 UNENCRYPTED="/mnt/stateful_partition/unencrypted/cache"
 
 # Files for temporary and final caching of full VPD data. Note that the
-# temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
-CACHE_TMP=$(mktemp --tmpdir=/var/tmp)
+# temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
 CACHE_DIR="${UNENCRYPTED}/vpd"
+CACHE_TMP=$(mktemp --tmpdir=${CACHE_DIR} full-v2.txt.tmp.XXXXXXXXXX)
 CACHE_FILE="${CACHE_DIR}/full-v2.txt"
 CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
 # Location for storing cached ECHO coupon codes.
-ECHO_COUPON_TMP=$(mktemp --tmpdir=/var/tmp)
+ECHO_COUPON_TMP=$(mktemp --tmpdir=${CACHE_DIR} vpd_echo.txt.tmp.XXXXXXXXXX)
 ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
 ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
@@ -41,8 +41,8 @@ OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
                  /var/cache/vpd/full-v2.cache"
 
 # Files for temporary and final storage of filtered VPD data. Note that the
-# temporary file is under /var/tmp to ensure that renaming (mv) is atomic.
-FILTERED_TMP=$(mktemp --tmpdir=/var/tmp)
+# temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
+FILTERED_TMP=$(mktemp --tmpdir=${CACHE_DIR} filtered.txt.tmp.XXXXXXXXXX)
 FILTERED_FILE="${CACHE_DIR}/filtered.txt"
 FILTERED_LINK="/var/log/vpd_2.0.txt"
 
@@ -110,6 +110,18 @@ generate_sed_filter() {
   echo "${output}"
 }
 
+# Perform an atomic file move that is also safe on unclean shutdown. To
+# accomplish this, the source file is synced to disk. This avoids the problem
+# of the meta data for the rename being visible on disk while the data blocks
+# have not or not entirely been flushed to disk due to a crash.
+atomic_move() {
+  local source="$1"
+  local dest="$2"
+
+  dd if=/dev/null of="${source}" conv=notrunc,fdatasync
+  mv -f "${source}" "${dest}"
+}
+
 # Generate the coupon code file containing cached VPD ECHO attributes.
 generate_echo_codes() {
   local echo_code_keys="
@@ -129,7 +141,7 @@ generate_echo_codes() {
 
   sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
     < "${CACHE_FILE}" > "${ECHO_COUPON_TMP}"
-  mv -n "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
+  atomic_move "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
   set_conservative_perm "${ECHO_COUPON_FILE}"
 
   # Since chrome needs access to this, the file is readable by group chronos.
@@ -166,8 +178,13 @@ migrate() {
     if [ -e "${target}" ]; then
       rm -f "${legacy}"
     else
+      # To get an atomic move, the legacy file is first copied to a temporary
+      # file on the destination file system which is then moved into place.
       mkdir -p "$(dirname ${target})"
-      mv -f "${legacy}" "${target}"
+      local target_tmp=$(mktemp --tmpdir="$(dirname ${target})" \
+          "$(basename ${target}).tmp.XXXXXXXXXX")
+      mv -f "${legacy}" "${target_tmp}"
+      atomic_move "${target_tmp}" "${target}"
     fi
   else
     echo "The type of legacy file ${legacy} cannot be migrated."
@@ -245,7 +262,7 @@ if [ ! -f "${CACHE_FILE}" ]; then
 
   generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
   generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
-  mv -f "${CACHE_TMP}" "${CACHE_FILE}"
+  atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
 
   # Remove existing filtered output file, forcing it to be regenerated.
   rm -f "${FILTERED_FILE}"
@@ -275,7 +292,7 @@ if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
   if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
     set_world_readable "${FILTERED_TMP}"
     rm -f "${FILTERED_FILE}"
-    mv -n "${FILTERED_TMP}" "${FILTERED_FILE}"
+    atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
   fi
 fi
 
