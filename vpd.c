@@ -5,12 +5,15 @@
  *
  */
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
 #include "lib/flashrom.h"
@@ -31,6 +34,8 @@
   "# Or an empty line followed by other commands.\n"                    \
   "#\n"
 
+/* Forward reference(s) */
+static uint8_t *readFileContent(const char* filename, uint32_t *filesize);
 
 /* Linked list to track temporary files
  */
@@ -243,13 +248,55 @@ error_1:
   return retval;
 }
 
+static int isbase64(uint8_t c)
+{
+  return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
+}
 
-/*  Given a key=value string, this function parses it and adds to arugument
- *  pair container.
+static uint8_t  *read_string_from_file(const char *file_name)
+{
+
+  uint32_t i, j, file_size;
+  uint8_t *file_buffer;
+
+  file_buffer = readFileContent(file_name, &file_size);
+
+  if (!file_buffer)
+    return NULL; /* The error has been reported already. */
+
+  /*
+   * Is the contents a proper base64 blob? Verify it and drop EOL characters
+   * along the way, this will help when displaying the contents.
+   */
+  for (i = 0, j = 0; i < file_size; i++) {
+    uint8_t c = file_buffer[i];
+
+    if ((c == 0xa) || (c == 0xd))
+      continue;  /* Skip EOL characters */
+
+    if (!isbase64(c)) {
+      fprintf(stderr, "[ERROR] file %s is not in base64 format (%c at %d)\n",
+              file_name, c, i);
+      free(file_buffer);
+      return NULL;
+    }
+    file_buffer[j++] = c;
+  }
+  file_buffer[j] = '\0';
+
+  return (uint8_t *)file_buffer;
+}
+
+
+/*
+ * Given a key=value string, this function parses it and adds to arugument
+ * pair container. The 'value' can be stored in a base64 format file, in this
+ * case the value field is the file name.
  */
-int parseString(const uint8_t *string) {
+int parseString(const uint8_t *string, int read_from_file) {
   uint8_t *key;
   uint8_t *value;
+  uint8_t *file_contents = NULL;
   int retval = VPD_OK;
 
   key = (uint8_t*)strdup((char*)string);
@@ -264,12 +311,26 @@ int parseString(const uint8_t *string) {
    * the value points to the end of string ('\0').
    */
   for (value = key; *value && *value != '='; value++);
-  if (*value == '=')
+  if (*value == '=') {
     *(value++) = '\0';
+
+    if (read_from_file) {
+      /* 'value' in fact is a file name */
+      file_contents = read_string_from_file((const char *)value);
+      if (!file_contents) {
+        free(key);
+        return VPD_FAIL;
+      }
+      value = file_contents;
+    }
+  }
 
   setString(&set_argument, key, value, pad_value_len);
 
   free(key);
+  if (file_contents)
+    free(file_contents);
+
   return retval;
 }
 
@@ -347,7 +408,7 @@ int findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
  *
  * Note: it's caller's responsbility to free the memory.
  */
-uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
+static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
   FILE *fp;
   uint8_t *read_buf;
 
@@ -363,7 +424,7 @@ uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
   /* read file content */
   fseek(fp, 0, SEEK_SET);
-  read_buf = malloc(*filesize);
+  read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
   assert(read_buf);
   if (*filesize != fread(read_buf, 1, *filesize, fp)) {
     fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
@@ -812,6 +873,8 @@ static void usage(const char *progname) {
   printf("      -h               This help page and version.\n");
   printf("      -f <filename>    The output file name.\n");
   printf("      -E <address>     EPS base address (default:0x240000).\n");
+  printf("      -S <key=file>    To add/change a string value, reading its\n");
+  printf("                       base64 contents from a file.\n");
   printf("      -s <key=value>   To add/change a string value.\n");
   printf("      -p <pad length>  Pad if length is shorter.\n");
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
@@ -832,12 +895,13 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   int retval = 0;
-  const char *optstring = "hf:E:s:p:i:lOg:d:";
+  const char *optstring = "hf:E:s:S:p:i:lOg:d:";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
     {"epsbase", 0, 0, 'E'},
     {"string", 0, 0, 's'},
+    {"base64file", 0, 0, 'S'},
     {"pad", required_argument, 0, 'p'},
     {"partition", 0, 0, 'i'},
     {"list", 0, 0, 'l'},
@@ -858,6 +922,7 @@ int main(int argc, char *argv[]) {
   int overwrite_it = 0;
   int modified = 0;
   int num_to_delete;
+  int read_from_file = 0;
 
   initContainer(&file);
   initContainer(&set_argument);
@@ -890,12 +955,16 @@ int main(int argc, char *argv[]) {
         }
         break;
 
+      case 'S':
+        read_from_file = 1;
+        /* Fall through into the next case */
       case 's':
-        if (VPD_OK != parseString((uint8_t*)optarg)) {
+        if (VPD_OK != parseString((uint8_t*)optarg, read_from_file)) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           retval = 1;
           goto teardown;
         }
+        read_from_file = 0;
         break;
 
       case 'p':
