@@ -11,20 +11,51 @@
 #  + chrome://system reads filtered file.
 #
 
+#
+# Make file access-able by root only.
+# $1: name of file to change ownership/permissions to.
+#
+set_conservative_perm() {
+  chown root:root "$1"
+  chmod go-stwx "$1"
+}
+
+#
+# Change file permissions so it is world readable.
+# $1: name of file to change ownership/permissions to.
+#
+set_world_readable() {
+  set_conservative_perm "$1"
+  chmod ugo+r "$1"
+}
+
+#
+# Set a directory as world enterable.
+# $1: directory path to set world enterable.
+#
+set_world_enterable() {
+  local dir="$1"
+  set_conservative_perm "${dir}"
+  chmod ugo+x "${dir}"
+}
+
+
 umask 0077  # Conservative strategy. Allow root-only first. Open later.
 
 # A temporary file used for caching the results of flashrom across subsequent
 # invocations of the vpd utility within this script.
 BIOS_TMP=$(mktemp)
 
-# The unencrypted directory to store VPD cache files. VPD may run when
-# encrypted partition is available. Also, accessing unencrypted partition is
-# faster.
-UNENCRYPTED="/mnt/stateful_partition/unencrypted/cache"
+# The unencrypted directory to store VPD cache files. VPD may run when encrypted
+# partition is unavailable. Also, accessing unencrypted partition is faster.
+CACHE_DIR="/mnt/stateful_partition/unencrypted/cache/vpd"
+
+# mktemp depends on existence of ${CACHE_DIR}.
+mkdir -p "${CACHE_DIR}"
+set_world_enterable "${CACHE_DIR}"
 
 # Files for temporary and final caching of full VPD data. Note that the
 # temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
-CACHE_DIR="${UNENCRYPTED}/vpd"
 CACHE_TMP=$(mktemp --tmpdir=${CACHE_DIR} full-v2.txt.tmp.XXXXXXXXXX)
 CACHE_FILE="${CACHE_DIR}/full-v2.txt"
 CACHE_LINK="/var/cache/vpd/full-v2.txt"
@@ -63,34 +94,6 @@ DEFINE_boolean "stdout" ${FLAGS_FALSE} \
 DEFINE_boolean "debug" ${FLAGS_FALSE} \
   "Debug mode."
 
-
-#
-# Make file access-able by root only.
-# $1: name of file to change ownership/permissions to.
-#
-set_conservative_perm() {
-  chown root:root "$1"
-  chmod go-stwx "$1"
-}
-
-#
-# Change file permissions so it is world readable.
-# $1: name of file to change ownership/permissions to.
-#
-set_world_readable() {
-  set_conservative_perm "$1"
-  chmod ugo+r "$1"
-}
-
-#
-# Set a directory as world enterable.
-# $1: directory path to set world enterable.
-#
-set_world_enterable() {
-  local dir="$1"
-  set_conservative_perm "${dir}"
-  chmod ugo+x "${dir}"
-}
 
 # Generate a sed filter for VPD output depending on the provided flag.
 #
@@ -187,7 +190,7 @@ migrate() {
       atomic_move "${target_tmp}" "${target}"
     fi
   else
-    echo "The type of legacy file ${legacy} cannot be migrated."
+    echo "# The type of legacy file ${legacy} cannot be migrated."
     exit 1
   fi
   mkdir -p "$(dirname ${legacy})"
@@ -240,9 +243,6 @@ elif [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
   exit 1
 fi
 
-mkdir -p "${CACHE_DIR}"
-set_world_enterable "${CACHE_DIR}"
-
 # If the cache file is missing, generate it.
 if [ ! -f "${CACHE_FILE}" ]; then
   # If the file exists, but was not regular.
@@ -291,7 +291,6 @@ if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
   # Rename temporary into permanent output if --stdout was not used.
   if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
     set_world_readable "${FILTERED_TMP}"
-    rm -f "${FILTERED_FILE}"
     atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
   fi
 fi
