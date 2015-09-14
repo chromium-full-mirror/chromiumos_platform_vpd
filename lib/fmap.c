@@ -34,7 +34,7 @@
  * Ported from mosys project (http://code.google.com/p/mosys/)
  *
  * The fmap document can be found in
- *     http://code.google.com/p/flashmap/wiki/FmapSpec.
+ *     https://github.com/dhendrix/flashmap/blob/wiki/FmapSpec.md
  */
 
 #include <assert.h>
