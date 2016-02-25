@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Copyright 2016 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Helper script to update the block_devmode flag in VPD which uses cached
+# data from dump_vpd_log to avoid unnecessary vpd calls.
+#
+# Call with param
+#   --enable      to ensure the block_devmode flag in VPD is set or
+#   --disable     to remove a potentially existing block_devmode flag.
+
+if [ "$1" = "--enable" ]; then
+  DESIRED=1
+elif [ "$1" = "--disable" ]; then
+  DESIRED=0
+else
+  echo "Invalid or missing parameter!" >&2
+  exit 1
+fi
+
+if dump_vpd_log --full --stdout | grep -q block_devmode; then
+  CURRENT=1
+else
+  CURRENT=0
+fi
+
+if [ ${CURRENT} = 0 -a ${DESIRED} = 1 ]; then
+  vpd -i RW_VPD -s block_devmode=1
+  dump_vpd_log --force
+fi
+
+if [ ${CURRENT} = 1 -a ${DESIRED} = 0 ]; then
+  vpd -i RW_VPD -d block_devmode
+  dump_vpd_log --force
+fi
