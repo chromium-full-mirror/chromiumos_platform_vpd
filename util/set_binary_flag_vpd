@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+# Copyright 2016 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Helper script to update flag(s) (eg. block_devmode) in VPD which uses cached
+# data from dump_vpd_log to avoid unnecessary vpd calls. This avoids both
+# unnecessary reads and writes.
+#
+# The script works only with boolean data. This is done in order to be
+# compatible with previous functionality of block_devmode flag and because for
+# now we don't need other type of values.
+#
+# The script must not be run with untrusted input.
+#
+# Call with params
+#   flag_name1 flag_value1 flag_name2 flag_value2...
+#
+# All the flag_values have to be either 1 or 0. Value of 0 is represented in the
+# VPD by absence of the flag. The flag_names can contain only english
+# alphanumeric characters and underscores.
+#
+# Example usage: set_binary_flag_vpd block_devmode 1 check_enrollment 0
+
+set -e
+
+arguments=()
+
+for var in "$@"; do
+  if [[ -z "${flag_name}" ]]; then
+    if [[ -z "${var}" || "${var}" =~ [^a-zA-Z0-9_] ]]; then
+      echo "Invalid param name: ${var}"
+      exit 1
+    fi
+    flag_name="${var}"
+  else
+    current="$(dump_vpd_log --full --stdout | grep "^\"${flag_name}\"" || true)"
+    if [[ "${var}" = 0 ]]; then
+      if [[ -n "${current}" ]]; then
+        arguments+=(-d)
+        arguments+=("${flag_name}")
+      fi
+    elif [[ "${var}" = 1 ]]; then
+      expected="\"${flag_name}\"=\"${var}\""
+      if [[ "${current}" != "${expected}" ]]; then
+        arguments+=(-s)
+        arguments+=("${flag_name}=${var}")
+      fi
+    else
+      echo "Invalid param value: ${var}"
+      exit 1
+    fi
+    flag_name=""
+  fi
+done
+
+if [[ "${#arguments[@]}" != 0 ]]; then
+  vpd -i RW_VPD "${arguments[@]}" || exit $?
+  dump_vpd_log --force || exit $?
+fi
