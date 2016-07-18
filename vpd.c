@@ -1096,7 +1096,8 @@ int main(int argc, char *argv[]) {
   num_to_delete = lenOfContainer(&del_argument);
   if (subtractContainer(&file, &del_argument) !=
       num_to_delete) {
-    fprintf(stderr, "At least one of key is not existed.\n");
+    fprintf(stderr, "[ERROR] At least one of the keys to delete"
+        " does not exist. Command ignored.\n");
     retval = 1;
     goto teardown;
   } else if (num_to_delete > 0) {
