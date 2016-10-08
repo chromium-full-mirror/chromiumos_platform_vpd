@@ -276,6 +276,8 @@ if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
      ! -f "${FILTERED_FILE}" ]; then
   WHITELIST="
     ActivateDate
+    block_devmode
+    check_enrollment
     customization_id
     initial_locale
     initial_timezone
