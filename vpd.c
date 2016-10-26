@@ -160,7 +160,7 @@ void cleanTempFiles() {
 /*  Given the offset of blob block (related to the first byte of EPS) and
  *  the size of blob, the is function generates an SMBIOS ESP.
  */
-int buildEpsAndTables(
+vpd_err_t buildEpsAndTables(
     const int size_blob,
     const int max_buf_len,
     unsigned char *buf,
@@ -169,7 +169,7 @@ int buildEpsAndTables(
   unsigned char *table = NULL;          /* the structure table */
   int table_len = 0;
   int num_structures = 0;
-  int retval = VPD_OK;
+  vpd_err_t retval = VPD_OK;
 
   assert(buf);
   assert(generated);
@@ -253,7 +253,7 @@ static int isbase64(uint8_t c)
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
 }
 
-static uint8_t  *read_string_from_file(const char *file_name)
+static uint8_t *read_string_from_file(const char *file_name)
 {
 
   uint32_t i, j, file_size;
@@ -308,16 +308,16 @@ static vpd_err_t checkKeyName(const uint8_t *name) {
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
  */
-int parseString(const uint8_t *string, int read_from_file) {
+vpd_err_t parseString(const uint8_t *string, int read_from_file) {
   uint8_t *key;
   uint8_t *value;
   uint8_t *file_contents = NULL;
-  int retval = VPD_OK;
+  vpd_err_t retval = VPD_OK;
 
   key = (uint8_t*)strdup((char*)string);
   if (!key || key[0] == '\0' || key[0] == '=') {
     if (key) free(key);
-    return VPD_FAIL;
+    return VPD_ERR_SYNTAX;
   }
 
   /*
@@ -334,7 +334,7 @@ int parseString(const uint8_t *string, int read_from_file) {
       file_contents = read_string_from_file((const char *)value);
       if (!file_contents) {
         free(key);
-        return VPD_FAIL;
+        return VPD_ERR_SYNTAX;
       }
       value = file_contents;
     }
@@ -371,7 +371,7 @@ int isEps(const void* ptr) {
  *
  * If found, vpd_offset and vpd_size are updated.
  */
-int findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
+vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
                      uint32_t* vpd_offset, uint32_t* vpd_size) {
   off_t sig_offset;
   struct fmap *fmap;
@@ -394,11 +394,11 @@ int findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
                                vpd_offset, vpd_size)) {
       found_vpd = 1;  /* Mark found here then saveFile() knows where to
                        * write back (vpd_offset, vpd_size). */
-      return 0;
+      return VPD_OK;
     } else {
       fprintf(stderr, "[ERROR] The VPD partition [%s] is not found.\n",
               fmap_vpd_area_name);
-      return 1;
+      return VPD_ERR_NOT_FOUND;
     }
   }
 
@@ -412,10 +412,10 @@ int findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
        *        However, return 4K should be safe enough now.
        *        In the long term, this code block will be obscured. */
       *vpd_size = 4096;
-      return 0;
+      return VPD_OK;
     }
   }
-  return 1;
+  return VPD_ERR_NOT_FOUND;
 }
 
 
@@ -453,27 +453,27 @@ static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 }
 
 
-int getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
+vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
   const char *filename;
   uint8_t *buf;
   uint32_t buf_size;
-  int retval;
+  vpd_err_t retval;
 
   filename = myMkTemp();
   if (!filename) {
-    return 1;
+    return VPD_ERR_SYSTEM;
   }
 
   if (FLASHROM_OK != flashromFullRead(filename)) {
     fprintf(stderr, "[WARN] Cannot read full BIOS.\n");
-    return 1;
+    return VPD_ERR_ROM_READ;
   }
   assert(buf = readFileContent(filename, &buf_size));
   if (findVpdPartition(buf, buf_size, offset, size)) {
     fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
-    retval = 1;
+    retval = VPD_ERR_INVALID;
   } else {
-    retval = 0;
+    retval = VPD_OK;
   }
   free(buf);
   return retval;
@@ -522,7 +522,7 @@ end_of_func:
 }
 
 
-int loadFile(const char *filename, struct PairContainer *container,
+vpd_err_t loadFile(const char *filename, struct PairContainer *container,
              int overwrite_it) {
   uint32_t file_size;
   uint8_t *read_buf;
@@ -535,11 +535,11 @@ int loadFile(const char *filename, struct PairContainer *container,
   int expected_handle;
   int table_len;
   int index;
-  int retval = 0;
+  vpd_err_t retval = VPD_OK;
 
   if (!(read_buf = readFileContent(filename, &file_size))) {
     fprintf(stderr, "[WARN] Cannot LoadFile('%s'), that's fine.\n", filename);
-    return 0;
+    return VPD_OK;
   }
 
   if (0 == findVpdPartition(read_buf, file_size, &vpd_offset, &vpd_size)) {
@@ -551,15 +551,15 @@ int loadFile(const char *filename, struct PairContainer *container,
      * Then, try to read the whole BIOS chip. */
     uint32_t offset, size;
     if (!eps_base_force_specified) {
-      if (0 == getVpdPartitionFromFullBios(&offset, &size)) {
+      retval = getVpdPartitionFromFullBios(&offset, &size);
+      if (VPD_OK == retval) {
         eps_base = offset;
         vpd_size = size;
       } else {
         if (overwrite_it) {
-          retval = 0;
+          retval = VPD_OK;
         } else {
           fprintf(stderr, "[ERROR] getVpdPartitionFromFullBios() failed.");
-          retval = 1;
         }
         goto teardown;
       }
@@ -579,20 +579,20 @@ int loadFile(const char *filename, struct PairContainer *container,
   if (eps_base == UNKNOWN_EPS_BASE) {
     fprintf(stderr, "[ERROR] Cannot determine eps_base. Cannot go on.\n"
                     "        You may use -E to specify the value.\n");
-    retval = 1;
+    retval = VPD_ERR_INVALID;
     goto teardown;
   }
 
   /* In overwrite mode, we don't care the content inside. Stop parsing. */
   if (overwrite_it) {
-    retval = 0;
+    retval = VPD_OK;
     goto teardown;
   }
 
   if (vpd_size < sizeof(struct vpd_entry)) {
     fprintf(stderr, "[ERROR] vpd_size:%d is too small to be compared.\n",
             vpd_size);
-    retval = 1;
+    retval = VPD_ERR_INVALID;
     goto teardown;
   }
   /* try to search the EPS if it is not aligned to the begin of partition. */
@@ -608,12 +608,12 @@ int loadFile(const char *filename, struct PairContainer *container,
     /* But OKAY if the VPD partition starts with FF, which might be un-used. */
     if (!memcmp("\xff\xff\xff\xff", vpd_buf, sizeof(VPD_ENTRY_MAGIC) - 1)) {
       fprintf(stderr, "[WARN] VPD partition not formatted. It's fine.\n");
-      retval = 0;
+      retval = VPD_OK;
       goto teardown;
     } else {
       fprintf(stderr, "SMBIOS signature is not matched.\n");
       fprintf(stderr, "You may use -O to overwrite the data.\n");
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
   }
@@ -644,7 +644,7 @@ int loadFile(const char *filename, struct PairContainer *container,
     /* make sure we haven't have too much handle already. */
     if (expected_handle > 65535) {
       fprintf(stderr, "[ERROR] too many handles. Terminate parsing.\n");
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
@@ -653,7 +653,7 @@ int loadFile(const char *filename, struct PairContainer *container,
       fprintf(stderr, "[ERROR] We now only support Binary Blob Pointer (241). "
                       "But the %dth handle is type %d. Terminate parsing.\n",
                       header->handle, header->type);
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
@@ -662,7 +662,7 @@ int loadFile(const char *filename, struct PairContainer *container,
       fprintf(stderr, "[ERROR] The handle value must be %d, but is %d.\n"
                       "        Use -O option to re-format.\n",
                       expected_handle, header->handle);
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
@@ -672,7 +672,7 @@ int loadFile(const char *filename, struct PairContainer *container,
       fprintf(stderr, "[ERROR] the table offset looks suspicious. "
                       "index=0x%x, data->offset=0x%x, related_eps_base=0x%x\n",
                       index, data->offset, related_eps_base);
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
@@ -690,13 +690,13 @@ int loadFile(const char *filename, struct PairContainer *container,
                         "        use -E to adjust offset values.\n",
                         (uint32_t)vpd_offset, (uint32_t)spd_offset,
                         spd_len, file_size);
-        retval = 1;
+        retval = VPD_ERR_INVALID;
         goto teardown;
       }
 
       if (!(spd_data = malloc(spd_len))) {
         fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
-        retval = 1;
+        retval = VPD_ERR_SYSTEM;
         goto teardown;
       }
       memcpy(spd_data, &read_buf[vpd_offset + spd_offset], spd_len);
@@ -708,10 +708,10 @@ int loadFile(const char *filename, struct PairContainer *container,
       for (;
            vpd_buf[index] != VPD_TYPE_TERMINATOR &&
            vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-        if (VPD_OK != decodeToContainer(container, file_size, vpd_buf, &index))
+        retval = decodeToContainer(container, file_size, vpd_buf, &index);
+        if (VPD_OK != retval)
         {
           fprintf(stderr, "decodeToContainer() error.\n");
-          retval = 1;
           goto teardown;
         }
       }
@@ -760,14 +760,14 @@ int loadFile(const char *filename, struct PairContainer *container,
 
       uuid_unparse(data->uuid, outstr);
       fprintf(stderr, "[ERROR] un-supported UUID: %s\n", outstr);
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
     /* move to next table */
     if ((table_len = vpd_type241_size(header)) < 0) {
       fprintf(stderr, "[ERROR] Cannot get type 241 structure table length.\n");
-      retval = 1;
+      retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
@@ -783,12 +783,12 @@ teardown:
 }
 
 
-int saveFile(const struct PairContainer *container, const char *filename,
+vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
              int write_back_to_flash) {
   FILE *fp;
   unsigned char eps[1024];
   int eps_len = 0;
-  int retval = 0;
+  vpd_err_t retval = VPD_OK;
   uint32_t file_seek;
   struct google_vpd_info *info = (struct google_vpd_info *)buf;
 
@@ -800,21 +800,21 @@ int saveFile(const struct PairContainer *container, const char *filename,
   memcpy(info->header.magic, VPD_INFO_MAGIC, sizeof(info->header.magic));
 
   /* encode into buffer */
-  if (VPD_OK != encodeContainer(&file, max_buf_len, buf, &buf_len)) {
+  retval = encodeContainer(&file, max_buf_len, buf, &buf_len);
+  if (VPD_OK != retval) {
     fprintf(stderr, "encodeContainer() error.\n");
-    retval = 1;
     goto teardown;
   }
-  if (VPD_OK != encodeVpdTerminator(max_buf_len, buf, &buf_len)) {
+  retval = encodeVpdTerminator(max_buf_len, buf, &buf_len);
+  if (VPD_OK != retval) {
     fprintf(stderr, "Out of space for terminator.\n");
-    retval = 1;
     goto teardown;
   }
   info->size = buf_len - sizeof(*info);
 
-  if (VPD_OK != buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len)) {
+  retval = buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len);
+  if (VPD_OK != retval) {
     fprintf(stderr, "Cannot build EPS.\n");
-    retval = 1;
     goto teardown;
   }
   assert(eps_len <= GOOGLE_SPD_OFFSET);
@@ -829,7 +829,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
      * Instead of truncating the whole file, open to write partial. */
     if (!(fp = fopen(filename, "r+"))) {
       fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
-      retval = 1;
+      retval = VPD_ERR_SYSTEM;
       goto teardown;
     }
   } else {
@@ -837,7 +837,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
      * Always creates the new file and overwrites the original content. */
     if (!(fp = fopen(filename, "w+"))) {
       fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
-      retval = 1;
+      retval = VPD_ERR_SYSTEM;
       goto teardown;
     }
   }
@@ -852,7 +852,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
   fseek(fp, file_seek + eps_offset, SEEK_SET);
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
-    retval = 1;
+    retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
 
@@ -861,7 +861,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
     fseek(fp, file_seek + spd_offset, SEEK_SET);
     if (fwrite(spd_data, spd_len, 1, fp) != 1) {
       fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
-      retval = 1;
+      retval = VPD_ERR_SYSTEM;
       goto teardown;
     }
   }
@@ -870,7 +870,7 @@ int saveFile(const struct PairContainer *container, const char *filename,
   fseek(fp, file_seek + vpd_2_0_offset, SEEK_SET);
   if (fwrite(buf, buf_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(VPD 2.0) error (%s)\n", strerror(errno));
-    retval = 1;
+    retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
   fclose(fp);
@@ -911,7 +911,7 @@ static void usage(const char *progname) {
 int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
-  int retval = 0;
+  vpd_err_t retval = VPD_OK;
   const char *optstring = "hf:E:s:S:p:i:lOg:d:";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
@@ -950,7 +950,6 @@ int main(int argc, char *argv[]) {
     switch (opt) {
       case 'h':
         usage(argv[0]);
-        retval = 0;
         goto teardown;
         break;
 
@@ -967,7 +966,7 @@ int main(int argc, char *argv[]) {
          *        implementation may (or may not) assign errno. */
         if (!eps_base && errno == EINVAL) {
           fprintf(stderr, "Not a number for EPS base address: %s\n", optarg);
-          retval = 1;
+          retval = VPD_ERR_SYNTAX;
           goto teardown;
         }
         break;
@@ -976,9 +975,9 @@ int main(int argc, char *argv[]) {
         read_from_file = 1;
         /* Fall through into the next case */
       case 's':
-        if (VPD_OK != parseString((uint8_t*)optarg, read_from_file)) {
+        retval = parseString((uint8_t*)optarg, read_from_file);
+        if (VPD_OK != retval) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
-          retval = 1;
           goto teardown;
         }
         read_from_file = 0;
@@ -992,7 +991,7 @@ int main(int argc, char *argv[]) {
          *        implementation may (or may not) assign errno. */
         if (!pad_value_len && errno == EINVAL) {
           fprintf(stderr, "Not a number for pad length: %s\n", optarg);
-          retval = 1;
+          retval = VPD_ERR_SYNTAX;
           goto teardown;
         }
         break;
@@ -1027,7 +1026,7 @@ int main(int argc, char *argv[]) {
 
       default:
         fprintf(stderr, "Invalid option (%s), use --help for usage.\n", optarg);
-        retval = 1;
+        retval = VPD_ERR_SYNTAX;
         goto teardown;
         break;
     }
@@ -1036,7 +1035,7 @@ int main(int argc, char *argv[]) {
   if (optind < argc) {
     fprintf(stderr, "[ERROR] unexpected argument: %s\n\n", argv[optind]);
     usage(argv[0]);
-    retval = 1;
+    retval = VPD_ERR_SYNTAX;
     goto teardown;
   }
 
@@ -1044,13 +1043,13 @@ int main(int argc, char *argv[]) {
   tmp_full_file = myMkTemp();
   if (!tmp_part_file || !tmp_full_file) {
     fprintf(stderr, "[ERROR] Failed creating temporary files.\n");
-    retval = 1;
+    retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
 
   if (list_it && filter_str) {
     fprintf(stderr, "[ERROR] -l and -g must be mutually exclusive.\n");
-    retval = 1;
+    retval = VPD_ERR_SYNTAX;
     goto teardown;
   }
 
@@ -1065,7 +1064,7 @@ int main(int argc, char *argv[]) {
       /* Try to read whole file */
       if (FLASHROM_OK != flashromFullRead(tmp_full_file)) {
         fprintf(stderr, "[ERROR] flashromFullRead() error!\n");
-        retval = 1;
+        retval = VPD_ERR_ROM_READ;
         goto teardown;
       } else {
         /* Success! Then the fmap_vpd_area_name is changed for later use. */
@@ -1080,9 +1079,9 @@ int main(int argc, char *argv[]) {
     save_file = filename;
   }
 
-  if ((retval = loadFile(load_file, &file, overwrite_it))) {
+  retval = loadFile(load_file, &file, overwrite_it);
+  if (VPD_OK != retval) {
     fprintf(stderr, "loadFile('%s') error.\n", load_file);
-    retval = 1;
     goto teardown;
   }
 
@@ -1098,7 +1097,7 @@ int main(int argc, char *argv[]) {
       num_to_delete) {
     fprintf(stderr, "[ERROR] At least one of the keys to delete"
         " does not exist. Command ignored.\n");
-    retval = 1;
+    retval = VPD_ERR_PARAM;
     goto teardown;
   } else if (num_to_delete > 0) {
     modified++;
@@ -1116,10 +1115,10 @@ int main(int argc, char *argv[]) {
       setContainerFilter(&file, filter_str);
     }
 
-    if (VPD_OK != exportContainer(
-          export_type, &file, sizeof(list_buf), list_buf, &list_len)) {
+    retval = exportContainer(export_type, &file, sizeof(list_buf),
+                             list_buf, &list_len);
+    if (VPD_OK != retval) {
       fprintf(stderr, "exportContainer(): Cannot generate string.\n");
-      retval = 1;
       goto teardown;
     }
 
@@ -1144,13 +1143,13 @@ int main(int argc, char *argv[]) {
   if (modified) {
     if (file_flag & HAS_VPD_1_2) {
       fprintf(stderr, "[ERROR] Writing VPD 1.2 not supported yet.\n");
-      retval = 1;
+      retval = VPD_FAIL;
       goto teardown;
     }
 
-    if ((retval = saveFile(&file, save_file, write_back_to_flash))) {
-      fprintf(stderr, "saveFile('%s') error.\n", filename);
-      retval = 1;
+    retval = saveFile(&file, save_file, write_back_to_flash);
+    if (VPD_OK != retval) {
+      fprintf(stderr, "saveFile('%s') error: %d\n", filename, retval);
       goto teardown;
     }
 
@@ -1158,7 +1157,7 @@ int main(int argc, char *argv[]) {
       if (FLASHROM_OK != flashromPartialWrite(save_file, tmp_full_file,
                                               fmap_vpd_area_name)) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
-        retval = 1;
+        retval = VPD_ERR_ROM_WRITE;
         goto teardown;
       }
     }
