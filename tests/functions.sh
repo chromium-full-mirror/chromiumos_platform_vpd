@@ -35,6 +35,21 @@
 # Software Foundation.
 set -e
 
+# Error/exit codes defined in lib_vpd.h.
+VPD_OK=0
+VPD_FAIL=3
+VPD_ERR_SYSTEM=4
+VPD_ERR_ROM_READ=5
+VPD_ERR_ROM_WRITE=6
+VPD_ERR_SYNTAX=7
+VPD_ERR_PARAM=8
+VPD_ERR_NOT_FOUND=9
+VPD_ERR_OVERFLOW=10
+VPD_ERR_INVALID=11
+
+GREP_OK=0
+GREP_FAIL=1
+
 clean_up() {
   rm -rf "$TMP_DIR"
 }

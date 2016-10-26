@@ -104,8 +104,8 @@ void setString(struct PairContainer *container,
  * Remove a key.
  * Returns VPD_OK if deleted successfully. Otherwise, VPD_FAIL.
  */
-int deleteKey(struct PairContainer *container,
-              const uint8_t *key) {
+vpd_err_t deleteKey(struct PairContainer *container,
+                    const uint8_t *key) {
   struct StringPair *found, **prev_next;
 
   found = findString(container, key, &prev_next);
@@ -167,10 +167,10 @@ int subtractContainer(struct PairContainer *dst,
 }
 
 
-int encodeContainer(const struct PairContainer *container,
-                    const int max_buf_len,
-                    uint8_t *buf,
-                    int *generated) {
+vpd_err_t encodeContainer(const struct PairContainer *container,
+                          const int max_buf_len,
+                          uint8_t *buf,
+                          int *generated) {
   struct StringPair *current;
 
   for (current = container->first; current; current = current->next) {
@@ -186,9 +186,11 @@ int encodeContainer(const struct PairContainer *container,
   return VPD_OK;
 }
 
-static int callbackDecodeToContainer(const uint8_t *key, int32_t key_len,
-                                     const uint8_t *value, int32_t value_len,
-                                     void *arg) {
+static vpd_err_t callbackDecodeToContainer(const uint8_t *key,
+                                           int32_t key_len,
+                                           const uint8_t *value,
+                                           int32_t value_len,
+                                           void *arg) {
   struct PairContainer *container = (struct PairContainer*)arg;
   uint8_t *key_string = (uint8_t*)malloc(key_len + 1),
           *value_string = (uint8_t*)malloc(value_len + 1);
@@ -201,16 +203,16 @@ static int callbackDecodeToContainer(const uint8_t *key, int32_t key_len,
   return VPD_OK;
 }
 
-int decodeToContainer(struct PairContainer *container,
-                      const int32_t max_len,
-                      const uint8_t *input_buf,
-                      int32_t *consumed) {
+vpd_err_t decodeToContainer(struct PairContainer *container,
+                            const int32_t max_len,
+                            const uint8_t *input_buf,
+                            int32_t *consumed) {
   return decodeVpdString(max_len, input_buf, consumed,
                          callbackDecodeToContainer, (void*)container);
 }
 
-int setContainerFilter(struct PairContainer *container,
-                       const uint8_t *filter) {
+vpd_err_t setContainerFilter(struct PairContainer *container,
+                             const uint8_t *filter) {
   struct StringPair *str;
 
   for (str = container->first; str; str = str->next) {
@@ -231,11 +233,11 @@ int setContainerFilter(struct PairContainer *container,
 }
 
 /* Export the container content with human-readable text. */
-int exportContainer(const int export_type,
-                    const struct PairContainer *container,
-                    const int max_buf_len,
-                    uint8_t *buf,
-                    int *generated) {
+vpd_err_t exportContainer(const int export_type,
+                          const struct PairContainer *container,
+                          const int max_buf_len,
+                          uint8_t *buf,
+                          int *generated) {
   struct StringPair *str;
   int index;
 
@@ -254,18 +256,19 @@ int exportContainer(const int export_type,
 
       snprintf(pad_str, sizeof(pad_str), "-p %d -s ", str->pad_len);
       pad_len = strlen(pad_str);
-      if ((index + pad_len) > max_buf_len) return VPD_FAIL;
+      if ((index + pad_len) > max_buf_len) return VPD_ERR_OVERFLOW;
       strcpy((char*)&buf[index], (char*)pad_str);
       index += pad_len;
     }
 
     if (export_type != VPD_EXPORT_VALUE) {
       /* double quote */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
+      if ((index + 1 > max_buf_len)) return VPD_ERR_OVERFLOW;
       buf[index++] = '"';
 
       /* output key */
-      if ((index + strlen((char*)str->key)) > max_buf_len) return VPD_FAIL;
+      if ((index + strlen((char*)str->key)) > max_buf_len)
+        return VPD_ERR_OVERFLOW;
       strcpy((char*)&buf[index], (char*)str->key);
       index += strlen((char*)str->key);
 
