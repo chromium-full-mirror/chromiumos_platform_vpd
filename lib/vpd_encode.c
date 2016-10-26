@@ -20,7 +20,7 @@
  *
  * Returns fail if the buffer is not long enough.
  */
-int encodeLen(
+vpd_err_t encodeLen(
     const int32_t len,
     uint8_t *encode_buf,
     const int32_t max_len,
@@ -31,14 +31,14 @@ int encodeLen(
 
   assert(encoded_len);
 
-  if (len < 0) return VPD_FAIL;
+  if (len < 0) return VPD_ERR_INVALID;
   shifting = len;
   /* reverse the len for every 7-bit. The little endian. */
   for (*encoded_len = 0; shifting; (*encoded_len)++) {
     reversed_7bits = (reversed_7bits << 7) | (shifting & 0x7f);
     shifting >>= 7;
   }
-  if (*encoded_len > max_len) return VPD_FAIL;
+  if (*encoded_len > max_len) return VPD_ERR_OVERFLOW;
   if (!*encoded_len) *encoded_len = 1;  /* output at least 1 byte */
 
   /* Output in reverse order, now big endian. */
@@ -54,7 +54,7 @@ int encodeLen(
 
 /*  Encodes the terminator.
  */
-int encodeVpdTerminator(
+vpd_err_t encodeVpdTerminator(
     const int max_buffer_len,
     uint8_t *output_buf,
     int *generated_len) {
@@ -70,7 +70,7 @@ int encodeVpdTerminator(
 }
 
 /* Encodes a string with padding support. */
-int encodeVpdString(
+vpd_err_t encodeVpdString(
     const uint8_t *key,
     const uint8_t *value,
     const int pad_value_len,
@@ -80,6 +80,7 @@ int encodeVpdString(
   int key_len, value_len;
   int ret_len;
   int pad_len = 0;
+  vpd_err_t retval;
 
   assert(generated_len);
 
@@ -88,7 +89,7 @@ int encodeVpdString(
   output_buf += *generated_len;  /* move cursor to end of string */
 
   /* encode type */
-  if (*generated_len >= max_buffer_len) return VPD_FAIL;
+  if (*generated_len >= max_buffer_len) return VPD_ERR_OVERFLOW;
   *(output_buf++) = VPD_TYPE_STRING;
   (*generated_len)++;
 
@@ -99,7 +100,7 @@ int encodeVpdString(
   output_buf += ret_len;
   *generated_len += ret_len;
   /* encode key string */
-  if (*generated_len + key_len > max_buffer_len) return VPD_FAIL;
+  if (*generated_len + key_len > max_buffer_len) return VPD_ERR_OVERFLOW;
   memcpy(output_buf, key, key_len);
   output_buf += key_len;
   *generated_len += key_len;
@@ -114,18 +115,19 @@ int encodeVpdString(
   }
 
   /* encode value len */
-  if (VPD_OK != encodeLen(value_len + pad_len, output_buf,
-                          max_buffer_len - *generated_len, &ret_len))
-    return VPD_FAIL;
+  retval = encodeLen(value_len + pad_len, output_buf,
+                     max_buffer_len - *generated_len, &ret_len);
+  if (VPD_OK != retval)
+    return retval;
   output_buf += ret_len;
   *generated_len += ret_len;
   /* encode value string */
-  if (*generated_len + value_len > max_buffer_len) return VPD_FAIL;
+  if (*generated_len + value_len > max_buffer_len) return VPD_ERR_OVERFLOW;
   memcpy(output_buf, value, value_len);
   output_buf += value_len;
   *generated_len += value_len;
   /* encode padding (if applicable) */
-  if (*generated_len + pad_len > max_buffer_len) return VPD_FAIL;
+  if (*generated_len + pad_len > max_buffer_len) return VPD_ERR_OVERFLOW;
   memset(output_buf, 0, pad_len);
   output_buf += pad_len;
   *generated_len += pad_len;

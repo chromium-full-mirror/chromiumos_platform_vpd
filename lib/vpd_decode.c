@@ -7,7 +7,7 @@
 #include <assert.h>
 #include "lib_vpd.h"
 
-int decodeLen(
+vpd_err_t decodeLen(
     const int32_t max_len,
     const uint8_t *in,
     int32_t *length,
@@ -20,7 +20,7 @@ int decodeLen(
 
   *length = 0;
   do {
-    if (i >= max_len) return VPD_FAIL;
+    if (i >= max_len) return VPD_ERR_OVERFLOW;
     more = in[i] & 0x80;
     *length <<= 7;
     *length |= in[i] & 0x7f;
@@ -34,7 +34,7 @@ int decodeLen(
 
 /* Sequentially decodes type, key, and value.
  */
-int decodeVpdString(
+vpd_err_t decodeVpdString(
     const int32_t max_len,
     const uint8_t *input_buf,
     int32_t *consumed,
@@ -44,10 +44,11 @@ int decodeVpdString(
   int32_t key_len, value_len;
   int32_t decoded_len;
   const uint8_t *key, *value;
+  vpd_err_t retval;
 
   /* type */
   if (*consumed >= max_len)
-    return VPD_FAIL;
+    return VPD_ERR_OVERFLOW;
 
   type = input_buf[*consumed];
   switch (type) {
@@ -56,22 +57,27 @@ int decodeVpdString(
       (*consumed)++;
 
       /* key */
-      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
-                              &key_len, &decoded_len) ||
-          *consumed + decoded_len >= max_len) {
-        return VPD_FAIL;
-      }
+      retval = decodeLen(max_len - *consumed, &input_buf[*consumed],
+                         &key_len, &decoded_len);
+      if (VPD_OK != retval)
+        return retval;
+
+      if (*consumed + decoded_len >= max_len)
+        return VPD_ERR_OVERFLOW;
 
       *consumed += decoded_len;
       key = &input_buf[*consumed];
       *consumed += key_len;
 
       /* value */
-      if (VPD_OK != decodeLen(max_len - *consumed, &input_buf[*consumed],
-                              &value_len, &decoded_len) ||
-          *consumed + decoded_len > max_len) {
-        return VPD_FAIL;
-      }
+      retval = decodeLen(max_len - *consumed, &input_buf[*consumed],
+                         &value_len, &decoded_len);
+      if (VPD_OK != retval)
+        return retval;
+
+      if (*consumed + decoded_len > max_len)
+        return VPD_ERR_OVERFLOW;
+
       *consumed += decoded_len;
       value = &input_buf[*consumed];
       *consumed += value_len;
@@ -82,7 +88,7 @@ int decodeVpdString(
       return VPD_OK;
 
     default:
-      return VPD_FAIL;
+      return VPD_ERR_INVALID;
       break;
   }
   return VPD_OK;
