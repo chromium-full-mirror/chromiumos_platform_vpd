@@ -50,48 +50,48 @@ test_image() {
 
   #
   # Test -s (without parameter) case.
-  # Expect return 1 for invalid parameter.
-  RUN 1 "$BINARY -f $BIOS -s"
+  # Expect error for invalid parameter.
+  RUN $VPD_ERR_SYNTAX "$BINARY -f $BIOS -s"
 
   #
   # Test -s (empty string) case.
-  # Expect return 1 for invalid parameter.
-  RUN 1 "$BINARY -f $BIOS -s ''"
+  # Expect error for invalid parameter.
+  RUN $VPD_ERR_SYNTAX "$BINARY -f $BIOS -s ''"
 
   #
   # Test -s= (empty key) case.
-  # Expect return 1 for invalid parameter.
-  RUN 1 "$BINARY -f $BIOS -s="
+  # Expect error for invalid parameter.
+  RUN $VPD_ERR_SYNTAX "$BINARY -f $BIOS -s="
 
   #
   # Test -s=DEF (empty key) case.
-  # Expect return 1 for invalid parameter.
-  RUN 1 "$BINARY -f $BIOS -s=DEF"
+  # Expect error for invalid parameter.
+  RUN $VPD_ERR_SYNTAX "$BINARY -f $BIOS -s=DEF"
 
   #
   # Test -sABC= (empty value) case.
   # Expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -sABC="
+  RUN $VPD_OK "$BINARY -f $BIOS -sABC="
   # Make sure ABC has been set
-  RUN 0 "$BINARY -f $BIOS -l | grep ABC"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep ABC"
 
   #
   # Test -sABC=DEF case.
   # Expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -sABC=DEF"
+  RUN $VPD_OK "$BINARY -f $BIOS -sABC=DEF"
   # Make sure ABC has been set
-  RUN 0 "$BINARY -f $BIOS -l | grep DEF"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep DEF"
 
   #
   # Test -d DEF case.
-  # expect return 1 because non-existed key
-  RUN 1 "$BINARY -f $BIOS -d DEF"
+  # expect error because non-existed key
+  RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -d DEF"
 
   #
   # Test -d ABC case.
   # expect SUCCESS and nothing left.
-  RUN 0 "$BINARY -f $BIOS -d ABC"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -d ABC"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 }
 
 main() {

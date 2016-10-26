@@ -51,45 +51,45 @@ test_image() {
   #
   # Add 3 strings one time.
   # Expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -s K0=D0 -s K1=D1 -s K2=D2"
+  RUN $VPD_OK "$BINARY -f $BIOS -s K0=D0 -s K1=D1 -s K2=D2"
 
   #
   # Add one more string and replace one.
   # Expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -s K3=D3 -s K1=d1"
+  RUN $VPD_OK "$BINARY -f $BIOS -s K3=D3 -s K1=d1"
   # Make sure K3 has been added
-  RUN 0 "$BINARY -f $BIOS -l | grep K3"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep K3"
   # Make sure K1 has been replaced
-  RUN 0 "$BINARY -f $BIOS -l | grep K1 | grep d1"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep K1 | grep d1"
 
   #
   # Test -d K99.
-  # expect return 1 because non-existed key
-  RUN 1 "$BINARY -f $BIOS -d K99"
+  # expect error because non-existed key
+  RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -d K99"
 
   #
   # Test -d K99 and -d K2.
-  # expect return 1 because not all key is found.
-  RUN 1 "$BINARY -f $BIOS -d K99 -d K2"
+  # expect error because not all key is found.
+  RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -d K99 -d K2"
   # Make sure K2 is still existing.
-  RUN 0 "$BINARY -f $BIOS -l | grep K2"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep K2"
 
   #
   # Delete single.
   # expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -d K2"
+  RUN $VPD_OK "$BINARY -f $BIOS -d K2"
 
   #
   # Delete remaining string (K0, K1, K3)
   # expect SUCCESS and nothing left.
-  RUN 0 "$BINARY -f $BIOS -d K1 -d K0 -d K3"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -d K1 -d K0 -d K3"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 
   #
   # -s -s, then -d -d
   # expect SUCCESS and nothing left.
-  RUN 0 "$BINARY -f $BIOS -s K98 -s K99 -d K98 -d K99"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s K98 -s K99 -d K98 -d K99"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 }
 
 main() {

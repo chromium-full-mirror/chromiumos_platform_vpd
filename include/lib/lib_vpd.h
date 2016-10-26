@@ -10,10 +10,26 @@
 
 #include <inttypes.h>
 
-enum {
-  VPD_OK = 0,
-  VPD_FAIL,
+enum vpd_err {
+   /* These error codes are returned to the shell as exit codes. If they are
+    * changed then callers such as Enterprise.VpdCheck from histograms.xml must
+    * be updated along with tests/functions.sh. If codes are added then they
+    * must not conflict with conventional exit codes:
+    * http://www.tldp.org/LDP/abs/html/exitcodes.html
+    */
+  VPD_OK              = 0,
+  VPD_FAIL            = 3,   /* generic vpd utility error */
+  VPD_ERR_SYSTEM      = 4,   /* system error (file error, out of memory, etc) */
+  VPD_ERR_ROM_READ    = 5,   /* error reading ROM (e.g. thru flashrom) */
+  VPD_ERR_ROM_WRITE   = 6,   /* error writing ROM (e.g. thru flashrom) */
+  VPD_ERR_SYNTAX      = 7,   /* command syntax error */
+  VPD_ERR_PARAM       = 8,   /* invalid parameter specified by user */
+  VPD_ERR_NOT_FOUND   = 9,   /* VPD not found */
+  VPD_ERR_OVERFLOW    = 10,  /* boundary exceeded */
+  VPD_ERR_INVALID     = 11,  /* error in VPD - possible corruption or bug */
 };
+
+typedef enum vpd_err vpd_err_t;
 
 enum {
   VPD_TYPE_TERMINATOR = 0,
@@ -33,9 +49,9 @@ enum {  /* export_type */
 };
 
 /* Callback for decodeVpdString to invoke. */
-typedef int VpdDecodeCallback(const uint8_t *key, int32_t key_len,
-                              const uint8_t *value, int32_t value_len,
-                              void *arg);
+typedef vpd_err_t VpdDecodeCallback(const uint8_t *key, int32_t key_len,
+                                    const uint8_t *value, int32_t value_len,
+                                    void *arg);
 
 /* Container data types */
 struct StringPair {
@@ -66,7 +82,7 @@ struct PairContainer {
  * encoded_len will return the exact bytes we encoded in this function.
  * Returns fail if the buffer is not long enough.
  */
-int encodeLen(
+vpd_err_t encodeLen(
     const int32_t len,
     uint8_t *encode_buf,
     const int32_t max_len,
@@ -81,7 +97,7 @@ int encodeLen(
  *
  * Returns VPD_FAIL if more bit is 1, but actually reaches the end of string.
  */
-int decodeLen(
+vpd_err_t decodeLen(
     const int32_t max_len,
     const uint8_t *in,
     int32_t *length,
@@ -94,7 +110,7 @@ int decodeLen(
  * After return, *generated_len would be plused the number of bytes generated
  * in this function.
  */
-int encodeVpdTerminator(
+vpd_err_t encodeVpdTerminator(
     const int max_buffer_len,
     uint8_t *output_buf,
     int *generated_len);
@@ -119,7 +135,7 @@ int encodeVpdTerminator(
  * The initial value of *generated_len can be non-zero, so that this value
  * can be used between multiple calls to encodeVpd2Pair().
  */
-int encodeVpdString(
+vpd_err_t encodeVpdString(
     const uint8_t *key,
     const uint8_t *value,
     const int pad_value_len,
@@ -140,7 +156,7 @@ int encodeVpdString(
  * If one entry is successfully decoded, sends it to callback and returns the
  * result.
  */
-int decodeVpdString(
+vpd_err_t decodeVpdString(
     const int32_t max_len,
     const uint8_t *input_buf,
     int32_t *consumed,
@@ -176,30 +192,30 @@ int subtractContainer(struct PairContainer *dst,
 
 /* Given a container, encode its all entries into the buffer.
  */
-int encodeContainer(const struct PairContainer *container,
-                    const int max_buf_len,
-                    uint8_t *buf,
-                    int *generated);
+vpd_err_t encodeContainer(const struct PairContainer *container,
+                          const int max_buf_len,
+                          uint8_t *buf,
+                          int *generated);
 
 /* Given a VPD blob, decode its entries and push into container.
  */
-int decodeToContainer(struct PairContainer *container,
-                      const int32_t max_len,
-                      const uint8_t *input_buf,
-                      int32_t *consumed);
+vpd_err_t decodeToContainer(struct PairContainer *container,
+                            const int32_t max_len,
+                            const uint8_t *input_buf,
+                            int32_t *consumed);
 
 /* Set filter for exporting functions.
  * If filter is NULL, resets the filter so that everything can be exported.
  */
-int setContainerFilter(struct PairContainer *container,
-                       const uint8_t *filter);
+vpd_err_t setContainerFilter(struct PairContainer *container,
+                             const uint8_t *filter);
 
 /*
  * Remove a key.
  * Returns VPD_OK if deleted successfully. Otherwise, VPD_FAIL.
  */
-int deleteKey(struct PairContainer *container,
-              const uint8_t *key);
+vpd_err_t deleteKey(struct PairContainer *container,
+                    const uint8_t *key);
 
 /*
  * Returns number of pairs in container.
@@ -215,11 +231,11 @@ int lenOfContainer(const struct PairContainer *container);
  * Afterward, the *generated will be plused on exact bytes this function has
  * generated.
  */
-int exportContainer(const int export_type,
-                    const struct PairContainer *container,
-                    const int max_buf_len,
-                    uint8_t *buf,
-                    int *generated);
+vpd_err_t exportContainer(const int export_type,
+                          const struct PairContainer *container,
+                          const int max_buf_len,
+                          uint8_t *buf,
+                          int *generated);
 
 void destroyContainer(struct PairContainer *container);
 

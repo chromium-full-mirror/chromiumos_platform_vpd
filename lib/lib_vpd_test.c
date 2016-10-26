@@ -24,8 +24,8 @@ int testEncodeLen() {
   int generated;
 
   /* fail cases */
-  assert(VPD_FAIL == encodeLen(-1, output, 0, &generated));
-  assert(VPD_FAIL == encodeLen(0x7f, output, 0, &generated));
+  assert(VPD_ERR_INVALID == encodeLen(-1, output, 0, &generated));
+  assert(VPD_ERR_OVERFLOW == encodeLen(0x7f, output, 0, &generated));
 
   /* success case - 1 byte output, all zeros */
   assert(VPD_OK == encodeLen(0x00, output, 1, &generated));
@@ -38,7 +38,7 @@ int testEncodeLen() {
   assert(0x7f == output[0]);
 
   /* 2 bytes of output */
-  assert(VPD_FAIL == encodeLen(0x80, output, 1, &generated));
+  assert(VPD_ERR_OVERFLOW == encodeLen(0x80, output, 1, &generated));
   /* success */
   assert(VPD_OK == encodeLen(0x80, output, 2, &generated));
   assert(2 == generated);
@@ -46,9 +46,9 @@ int testEncodeLen() {
   assert(0x00 == output[1]);
 
   /* 3 bytes of output */
-  assert(VPD_FAIL == encodeLen(0x100040, output, 0, &generated));
-  assert(VPD_FAIL == encodeLen(0x100040, output, 1, &generated));
-  assert(VPD_FAIL == encodeLen(0x100040, output, 2, &generated));
+  assert(VPD_ERR_OVERFLOW == encodeLen(0x100040, output, 0, &generated));
+  assert(VPD_ERR_OVERFLOW == encodeLen(0x100040, output, 1, &generated));
+  assert(VPD_ERR_OVERFLOW == encodeLen(0x100040, output, 2, &generated));
   /* success */
   assert(VPD_OK == encodeLen(0x100040, output, 3, &generated));
   assert(3 == generated);
@@ -67,7 +67,7 @@ int testDecodeLen() {
 
   { /* max_len is 0. No more char in string. */
     uint8_t encoded[] = { 0x00 };
-    assert(VPD_FAIL == decodeLen(0, encoded, &length, &consumed));
+    assert(VPD_ERR_OVERFLOW == decodeLen(0, encoded, &length, &consumed));
   }
   { /* just decode one byte */
     uint8_t encoded[] = { 0x00 };
@@ -83,15 +83,15 @@ int testDecodeLen() {
   }
   { /* more bit is set, but reachs end of string. */
     uint8_t encoded[] = { 0x80 };
-    assert(VPD_FAIL == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(VPD_ERR_OVERFLOW == decodeLen(sizeof(encoded), encoded, &length, &consumed));
   }
   { /* decode 2 bytes, but reachs end of string. */
     uint8_t encoded[] = { 0x81, 0x02 };
-    assert(VPD_FAIL == decodeLen(1, encoded, &length, &consumed));
+    assert(VPD_ERR_OVERFLOW == decodeLen(1, encoded, &length, &consumed));
   }
   { /* more bit is set, but reachs end of string. */
     uint8_t encoded[] = { 0x81, 0x82 };
-    assert(VPD_FAIL == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(VPD_ERR_OVERFLOW == decodeLen(sizeof(encoded), encoded, &length, &consumed));
   }
   { /* decode 2 bytes, normal case */
     uint8_t encoded[] = { 0x81, 0x02 };

@@ -54,7 +54,7 @@ test_image() {
   org_mtime=$(mtime $BIOS)
   org_chksum=$(chksum $BIOS)
   sleep 2  # ensure the system has changed.
-  RUN 0 "$BINARY -f $BIOS -l"
+  RUN $VPD_OK "$BINARY -f $BIOS -l"
   new_mtime=$(mtime $BIOS)
   new_chksum=$(chksum $BIOS)
   EXPECT_EQ "$org_mtime" "$new_mtime" \
@@ -65,46 +65,46 @@ test_image() {
   #
   # -O to reset all
   # expect SUCCESS and nothing exists
-  RUN 0 "$BINARY -f $BIOS -O"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -O"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 
   #
   # Add one string
   # Expect SUCCESS
-  RUN 0 "$BINARY -f $BIOS -s ABC=DEF"
+  RUN $VPD_OK "$BINARY -f $BIOS -s ABC=DEF"
   # Make sure ABC has been added
-  RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep DEF"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep ABC | grep DEF"
   # Check format, expect the key string is in front of value string
-  RUN 0 "$BINARY -f $BIOS -l | grep -r 'ABC.*DEF'"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep -r 'ABC.*DEF'"
 
   #
   # Test replacement
-  RUN 0 "$BINARY -f $BIOS -s ABC=123"
+  RUN $VPD_OK "$BINARY -f $BIOS -s ABC=123"
   # Make sure ABC has been replaced
-  RUN 0 "$BINARY -f $BIOS -l | grep ABC | grep 123"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep ABC | grep 123"
 
   #
   # Test -d NONE
-  # expect return 1 because non-existed key
-  RUN 1 "$BINARY -f $BIOS -d NONE"
+  # expect error because non-existed key
+  RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -d NONE"
 
   #
   # Delete single.
   # expect SUCCESS and nothing left.
-  RUN 0 "$BINARY -f $BIOS -d ABC"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -d ABC"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 
   #
   # Test -O and -s at the same command
   # expect SUCCESS and new key has been added
-  RUN 0 "$BINARY -f $BIOS -O -s 5566=183"
-  RUN 0 "$BINARY -f $BIOS -l | grep 5566 | grep 183"
+  RUN $VPD_OK "$BINARY -f $BIOS -O -s 5566=183"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep 5566 | grep 183"
 
   #
   # -O to reset all
   # expect SUCCESS and nothing exists
-  RUN 0 "$BINARY -f $BIOS -O"
-  RUN 1 "$BINARY -f $BIOS -l | grep -e '.*'"
+  RUN $VPD_OK "$BINARY -f $BIOS -O"
+  RUN $GREP_FAIL "$BINARY -f $BIOS -l | grep -e '.*'"
 }
 
 main() {

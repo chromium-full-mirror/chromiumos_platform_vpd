@@ -51,28 +51,28 @@ test_image() {
   #
   # Test only '=' in string
   # Expect = is saved successfully
-  RUN 0 "$BINARY -f $BIOS -s KEY='='"
-  RUN 0 "$BINARY -f $BIOS -l | grep '\"KEY\"=\"=\"'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s KEY='='"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep '\"KEY\"=\"=\"'"
 
   #
   # '=' in the middle of string
-  RUN 0 "$BINARY -f $BIOS -s KEY='123=456'"
-  RUN 0 "$BINARY -f $BIOS -l | grep '\"123=456\"'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s KEY='123=456'"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep '\"123=456\"'"
 
   #
   # '=' in the begin of string
-  RUN 0 "$BINARY -f $BIOS -s KEY='=5566'"
-  RUN 0 "$BINARY -f $BIOS -l | grep '\"=5566\"'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s KEY='=5566'"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep '\"=5566\"'"
 
   #
   # '=' in the end of string
-  RUN 0 "$BINARY -f $BIOS -s KEY='183='"
-  RUN 0 "$BINARY -f $BIOS -l | grep '\"183=\"'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s KEY='183='"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep '\"183=\"'"
 
   #
   # Multiple '=' in the string
-  RUN 0 "$BINARY -f $BIOS -s KEY='==democracy=at=4am=='"
-  RUN 0 "$BINARY -f $BIOS -l | grep '\"==democracy=at=4am==\"'"
+  RUN $VPD_OK "$BINARY -f $BIOS -s KEY='==democracy=at=4am=='"
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep '\"==democracy=at=4am==\"'"
 }
 
 main() {
