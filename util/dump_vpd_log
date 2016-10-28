@@ -261,6 +261,7 @@ if [ ! -f "${CACHE_FILE}" ]; then
   fi
 
   generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
+  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >> "${CACHE_TMP}"
   generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
   atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
 
