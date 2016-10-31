@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# Copyright 2016 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Checks if the VPD can be read and if the contents match the data from
+# dump_vpd_log. Send the results to UMA. The script has no input arguments.
+#
+# Supposed to run after the boot is done.
+#
+# Depends on dump_vpd_log script, specifically for the format of the output.
+
+send_uma_result() {
+  metrics_client -s Enterprise.VpdCheck "$1" &
+}
+
+#
+# main()
+#
+
+renice -n 19 $$
+
+SUCCESS=0
+CONTENT_MISMATCH=256
+EMPTY_VPD=257
+EMPTY_DUMP_VPD=258
+EMPTY_RW_VPD=259
+
+vpd_rw_output="$(vpd -i RW_VPD -l)"
+read_status=$?
+if [ "${read_status}" != 0 ]; then
+  send_uma_result "${read_status}"
+  exit "${read_status}"
+fi
+
+dump_vpd_output="$(dump_vpd_log --stdout --full)"
+if [ -z "${dump_vpd_output}" ] && [ -z "${vpd_rw_output}" ]; then
+  send_uma_result "${EMPTY_VPD}"
+elif [ -z "${dump_vpd_output}" ]; then
+  send_uma_result "${EMPTY_DUMP_VPD}"
+elif [ -z "${vpd_rw_output}" ]; then
+  send_uma_result "${EMPTY_RW_VPD}"
+elif [ -z "${dump_vpd_output##*$vpd_rw_output}" ]; then
+  send_uma_result "${SUCCESS}"
+else
+  send_uma_result "${CONTENT_MISMATCH}"
+fi
