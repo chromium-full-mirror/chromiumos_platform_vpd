@@ -1,5 +1,0 @@
-This is the directory for ChromeOS VPD (Vital Product Data) utility.
-
-Regulation test.
-
-  % make test
