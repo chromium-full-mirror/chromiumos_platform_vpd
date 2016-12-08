@@ -1,0 +1,45 @@
+#!/bin/sh
+# Copyright 2016 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+#
+# Helper utility to read a single value from VPD.
+#
+# The script is optimized for reading one entry from VPD, first RO then RW.
+# If the given key is not found, prints nothing.
+
+# CACHE_FILE is defined from dump_vpd_log.
+CACHE_FILE=/mnt/stateful_partition/unencrypted/cache/vpd/full-v2.txt
+SYS_VPD=/sys/firmware/vpd
+
+cat_if_exists() {
+  local file="$1"
+  if [ -f "${file}" ]; then
+    cat "${file}"
+    return 0
+  fi
+  return 1
+}
+
+main() {
+  if [ "$#" != 1 ]; then
+    echo "Usage: $0 key_name" >&2
+    exit 1
+  fi
+  local key="$1"
+
+  # Reading from /sys (works on ARM 3.18+, x86 4.4+) is most efficient;
+  # otherwise we have to parse from VPD cache (maintained by dump_vpd_log).
+  if [ -d "${SYS_VPD}/ro" ]; then
+    cat_if_exists "${SYS_VPD}/ro/${key}" ||
+      cat_if_exists "${SYS_VPD}/rw/${key}"
+  else
+    if [ ! -f "${CACHE_FILE}" ]; then
+      # /etc/init/vpd-log.conf was not executed, or cache corrupted.
+      dump_vpd_log
+    fi
+    # Read from cache
+    sed -n "s/^\"${key}\"=\"\(.*\)\"\$/\1/p" "${CACHE_FILE}" | head -n 1
+  fi
+}
+main "$@"
