@@ -36,12 +36,7 @@ for var in "$@"; do
     flag_name="${var}"
   else
     current="$(dump_vpd_log --full --stdout | grep "^\"${flag_name}\"" || true)"
-    if [[ "${var}" = 0 ]]; then
-      if [[ -n "${current}" ]]; then
-        arguments+=(-d)
-        arguments+=("${flag_name}")
-      fi
-    elif [[ "${var}" = 1 ]]; then
+    if [[ "${var}" = 0 || "${var}" = 1 ]]; then
       expected="\"${flag_name}\"=\"${var}\""
       if [[ "${current}" != "${expected}" ]]; then
         arguments+=(-s)
