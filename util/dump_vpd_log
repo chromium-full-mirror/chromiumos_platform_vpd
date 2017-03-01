@@ -87,11 +87,21 @@ generate_cache_file() {
   if [ -f "${CACHE_FILE}" ]; then
     return
   fi
+  # A temporary file used for caching the results of flashrom across subsequent
+  # invocations of the vpd utility within this script.
+  local bios_tmp="$(mktemp)"
+  add_temp_files "${bios_tmp}"
+
+  # The temporary file is under same folder as ${CACHE_FILE} to ensure that
+  # renaming (mv) is atomic.
+  local cache_tmp="$(mktemp --tmpdir="$(dirname "${CACHE_FILE}")" \
+                     full-v2.txt.tmp.XXXXXXXXXX)"
+  add_temp_files "${cache_tmp}"
 
   # If the file exists, but was not regular.
   rm -f "${CACHE_FILE}"
-  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
-  args_whole="-p host -r ${BIOS_TMP}"
+  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${bios_tmp}"
+  args_whole="-p host -r ${bios_tmp}"
   if [ -n "${debug_log}" ]; then
     echo "-------------------" "$(date)" >>"${debug_log}"
     flashrom ${args_partial} -V -V -V >>"${debug_log}" 2>&1 ||
@@ -103,10 +113,10 @@ generate_cache_file() {
       exit 1
   fi
 
-  generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
-  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${CACHE_TMP}"
-  generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
-  atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
+  generate_full_text "${bios_tmp}" "RO_VPD" "${cache_tmp}"
+  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${cache_tmp}"
+  generate_full_text "${bios_tmp}" "RW_VPD" "${cache_tmp}"
+  atomic_move "${cache_tmp}" "${CACHE_FILE}"
 
   # Remove existing filtered output file, forcing it to be regenerated.
   rm -f "${FILTERED_FILE}"
@@ -117,21 +127,25 @@ generate_echo_codes() {
   local echo_code_keys="
     ubind_attribute
     gbind_attribute"
-  local coupon_dir="$(dirname ${ECHO_COUPON_FILE})"
-  local link_dir="$(dirname ${ECHO_COUPON_LINK})"
 
-  mkdir -p "${coupon_dir}" "${link_dir}"
   if [ -f "${ECHO_COUPON_FILE}" ]; then
     return
   fi
+  local coupon_dir="$(dirname ${ECHO_COUPON_FILE})"
+  local link_dir="$(dirname ${ECHO_COUPON_LINK})"
+  mkdir -p "${coupon_dir}" "${link_dir}"
+
+  # The temporary file is under same folder as ${ECHO_COUPON_FILE} to ensure
+  # that renaming (mv) is atomic.
+  local tmpfile="$(mktemp --tmpdir="${coupon_dir}" vpd_echo.txt.tmp.XXXXXXXXXX)"
 
   # If the file exists but isn't regular, it will be removed first.
   rm -f "${ECHO_COUPON_FILE}"
   rm -f "${ECHO_COUPON_LINK}"
 
   sed -e "$(generate_sed_filter ${echo_code_keys})" "${CACHE_FILE}" \
-    >"${ECHO_COUPON_TMP}"
-  atomic_move "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
+    >"${tmpfile}"
+  atomic_move "${tmpfile}" "${ECHO_COUPON_FILE}"
   set_conservative_perm "${ECHO_COUPON_FILE}"
 
   # Since chrome needs access to this, the file is readable by group chronos.
@@ -162,12 +176,18 @@ generate_filtered_file() {
     return
   fi
 
+  # Files for temporary and final storage of filtered VPD data. Note that the
+  # temporary file is under same folder with ${FILTERED_FILE} to ensure that
+  # renaming (mv) is atomic.
+  local tmpfile="$(mktemp --tmpdir="$(dirname "${FILTERED_FILE}")" \
+                   filtered.txt.tmp.XXXXXXXXXX)"
+  add_temp_files "${tmpfile}"
+
   # If the file exists, but was not regular.
   rm -f "${FILTERED_FILE}"
-  sed -e "$(generate_sed_filter ${whitelist})" "${CACHE_FILE}" \
-    >"${FILTERED_TMP}"
-  set_world_readable "${FILTERED_TMP}"
-  atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
+  sed -e "$(generate_sed_filter ${whitelist})" "${CACHE_FILE}" >"${tmpfile}"
+  set_world_readable "${tmpfile}"
+  atomic_move "${tmpfile}" "${FILTERED_FILE}"
 }
 
 # Invoke the VPD utility for generating full VPD content.
@@ -212,15 +232,31 @@ migrate() {
   ln -sf "${target}" "${legacy}"
 }
 
+# Add a file to temporary file list to be deleted on exit (cleanup).
+add_temp_files() {
+  TEMP_FILES="${TEMP_FILES} $*"
+}
+
+# Removes all temporary files.
+cleanup() {
+  if [ -n "${TEMP_FILES}" ]; then
+    # TEMP_FILES is a list so we don't quote it.
+    rm -f ${TEMP_FILES}
+    TEMP_FILES=""
+  fi
+}
+
 #
 # main()
 #
 main() {
   umask 0077  # Conservative strategy. Allow root-only first. Open later.
 
-  # A temporary file used for caching the results of flashrom across subsequent
-  # invocations of the vpd utility within this script.
-  BIOS_TMP="$(mktemp)"
+  # A list of temporary files to delete.
+  TEMP_FILES=""
+
+  # Remove the temp files.
+  trap cleanup EXIT
 
   # The unencrypted directory to store VPD cache files. VPD may run when
   # encrypted partition is unavailable. Also, accessing unencrypted partition is
@@ -231,14 +267,11 @@ main() {
   mkdir -p "${CACHE_DIR}"
   set_world_enterable "${CACHE_DIR}"
 
-  # Files for temporary and final caching of full VPD data. Note that the
-  # temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
-  CACHE_TMP=$(mktemp --tmpdir=${CACHE_DIR} full-v2.txt.tmp.XXXXXXXXXX)
+  # Files for final cache of full VPD data.
   CACHE_FILE="${CACHE_DIR}/full-v2.txt"
   CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
   # Location for storing cached ECHO coupon codes.
-  ECHO_COUPON_TMP=$(mktemp --tmpdir=${CACHE_DIR} vpd_echo.txt.tmp.XXXXXXXXXX)
   ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
   ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
@@ -248,14 +281,9 @@ main() {
   OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
                    /var/cache/vpd/full-v2.cache"
 
-  # Files for temporary and final storage of filtered VPD data. Note that the
-  # temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
-  FILTERED_TMP=$(mktemp --tmpdir=${CACHE_DIR} filtered.txt.tmp.XXXXXXXXXX)
+  # Location for storing filtered VPD data.
   FILTERED_FILE="${CACHE_DIR}/filtered.txt"
   FILTERED_LINK="/var/log/vpd_2.0.txt"
-
-  # Remove the temp file, which has full data if the script terminates early.
-  trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP} ${ECHO_COUPON_TMP}" EXIT
 
   if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
     debug_log="/tmp/dump_vpd_log.debug"
