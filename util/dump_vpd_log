@@ -108,8 +108,10 @@ generate_cache_file() {
       flashrom ${args_whole} -V -V -V >>"${debug_log}" 2>&1 ||
       exit 1
   else
-    flashrom ${args_partial} ||
-      flashrom ${args_whole} ||
+    # flashrom may print messages on stdout (for example, "Reading flash...
+    # SUCCESS") so we do want to prevent that for --stdout.
+    flashrom ${args_partial} 1>&2 ||
+      flashrom ${args_whole} 1>&2 ||
       exit 1
   fi
 
