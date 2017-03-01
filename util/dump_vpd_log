@@ -11,6 +11,25 @@
 #  + chrome://system reads filtered file.
 #
 
+# Load shflags, define script flags.
+. /usr/share/misc/shflags
+
+DEFINE_boolean "clean" ${FLAGS_FALSE} \
+  "Clean VPD cache and output files, then quit."
+DEFINE_boolean "force" ${FLAGS_FALSE} \
+  "Force regeneration of VPD cache and output files."
+DEFINE_boolean "full" ${FLAGS_FALSE} \
+  "Generate full output, without filtering."
+DEFINE_boolean "stdout" ${FLAGS_FALSE} \
+  "Dump VPD to standard output, instead of a file."
+DEFINE_boolean "debug" ${FLAGS_FALSE} \
+  "Debug mode."
+
+# Parse arguments.
+FLAGS "$@"
+eval set -- "${FLAGS_ARGV}"
+set -e
+
 #
 # Make file access-able by root only.
 # $1: name of file to change ownership/permissions to.
@@ -38,62 +57,6 @@ set_world_enterable() {
   set_conservative_perm "${dir}"
   chmod ugo+x "${dir}"
 }
-
-
-umask 0077  # Conservative strategy. Allow root-only first. Open later.
-
-# A temporary file used for caching the results of flashrom across subsequent
-# invocations of the vpd utility within this script.
-BIOS_TMP=$(mktemp)
-
-# The unencrypted directory to store VPD cache files. VPD may run when encrypted
-# partition is unavailable. Also, accessing unencrypted partition is faster.
-CACHE_DIR="/mnt/stateful_partition/unencrypted/cache/vpd"
-
-# mktemp depends on existence of ${CACHE_DIR}.
-mkdir -p "${CACHE_DIR}"
-set_world_enterable "${CACHE_DIR}"
-
-# Files for temporary and final caching of full VPD data. Note that the
-# temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
-CACHE_TMP=$(mktemp --tmpdir=${CACHE_DIR} full-v2.txt.tmp.XXXXXXXXXX)
-CACHE_FILE="${CACHE_DIR}/full-v2.txt"
-CACHE_LINK="/var/cache/vpd/full-v2.txt"
-
-# Location for storing cached ECHO coupon codes.
-ECHO_COUPON_TMP=$(mktemp --tmpdir=${CACHE_DIR} vpd_echo.txt.tmp.XXXXXXXXXX)
-ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
-ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
-
-# A space delimited list of old VPD cache files, which will be removed as a
-# cleanup measure. Please be sure to update this list as the cache filename
-# changes between versions of this script!
-OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
-                 /var/cache/vpd/full-v2.cache"
-
-# Files for temporary and final storage of filtered VPD data. Note that the
-# temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
-FILTERED_TMP=$(mktemp --tmpdir=${CACHE_DIR} filtered.txt.tmp.XXXXXXXXXX)
-FILTERED_FILE="${CACHE_DIR}/filtered.txt"
-FILTERED_LINK="/var/log/vpd_2.0.txt"
-
-# Remove the temp file, which has full data if the script terminates early.
-trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP} ${ECHO_COUPON_TMP}" EXIT
-
-# Load shflags, define script flags.
-. /usr/share/misc/shflags
-
-DEFINE_boolean "clean" ${FLAGS_FALSE} \
-  "Clean VPD cache and output files, then quit."
-DEFINE_boolean "force" ${FLAGS_FALSE} \
-  "Force regeneration of VPD cache and output files."
-DEFINE_boolean "full" ${FLAGS_FALSE} \
-  "Generate full output, without filtering."
-DEFINE_boolean "stdout" ${FLAGS_FALSE} \
-  "Dump VPD to standard output, instead of a file."
-DEFINE_boolean "debug" ${FLAGS_FALSE} \
-  "Debug mode."
-
 
 # Generate a sed filter for VPD output depending on the provided flag.
 #
@@ -143,7 +106,7 @@ generate_echo_codes() {
   rm -f "${ECHO_COUPON_LINK}"
 
   sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
-    < "${CACHE_FILE}" > "${ECHO_COUPON_TMP}"
+    <"${CACHE_FILE}" >"${ECHO_COUPON_TMP}"
   atomic_move "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
   set_conservative_perm "${ECHO_COUPON_FILE}"
 
@@ -161,7 +124,7 @@ generate_echo_codes() {
 # $2: partition name
 # $3: file name to append output
 generate_full_text() {
-  (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >> "$3"
+  (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >>"$3"
 }
 
 # Migrate the legacy file under encrypted partition to be a symlink pointing to
@@ -197,108 +160,145 @@ migrate() {
   ln -sf "${target}" "${legacy}"
 }
 
-
 #
 # main()
 #
+main() {
+  umask 0077  # Conservative strategy. Allow root-only first. Open later.
 
-# Parse arguments.
-FLAGS "$@"
-eval set -- "${FLAGS_ARGV}"
-set -e
+  # A temporary file used for caching the results of flashrom across subsequent
+  # invocations of the vpd utility within this script.
+  BIOS_TMP="$(mktemp)"
 
-if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
-  debug_log="/tmp/dump_vpd_log.debug"
-fi
+  # The unencrypted directory to store VPD cache files. VPD may run when
+  # encrypted partition is unavailable. Also, accessing unencrypted partition is
+  # faster.
+  CACHE_DIR="/mnt/stateful_partition/unencrypted/cache/vpd"
 
-# Cleanup: remove old versions of the VPD cache file; this ensures that we
-# don't have unused VPD data lying around, which takes unnecessary space, might
-# lead to stale VPD log extraction (in case of a script version rollback), and
-# is perceived as a potential security breach.
-for f in ${OLD_CACHE_FILES}; do
-  rm -f "${f}"
-done
+  # mktemp depends on existence of ${CACHE_DIR}.
+  mkdir -p "${CACHE_DIR}"
+  set_world_enterable "${CACHE_DIR}"
 
-# Remove output files if --clean or --force flagged.
-if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} -o \
-     "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
-  rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
-        "${FILTERED_LINK}" "${CACHE_LINK}"
+  # Files for temporary and final caching of full VPD data. Note that the
+  # temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
+  CACHE_TMP=$(mktemp --tmpdir=${CACHE_DIR} full-v2.txt.tmp.XXXXXXXXXX)
+  CACHE_FILE="${CACHE_DIR}/full-v2.txt"
+  CACHE_LINK="/var/cache/vpd/full-v2.txt"
 
-  # If --clean was flagged, we're done.
-  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ]; then
-    exit 0
-  fi
-fi
+  # Location for storing cached ECHO coupon codes.
+  ECHO_COUPON_TMP=$(mktemp --tmpdir=${CACHE_DIR} vpd_echo.txt.tmp.XXXXXXXXXX)
+  ECHO_COUPON_FILE="${CACHE_DIR}/echo/vpd_echo.txt"
+  ECHO_COUPON_LINK="/var/cache/echo/vpd_echo.txt"
 
-if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
-  FILTERED_TMP=/dev/stdout
-elif [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
-  # --full must only be used with --stdout, to prevent accidental dumping of
-  # sensitive VPD info into a world-readable file. To be used as follows:
-  #
-  #   dump_vpd_log --full --stdout  > a_root_readable_file
-  #
-  echo "You specified --full without --stdout, aborting."
-  exit 1
-fi
+  # A space delimited list of old VPD cache files, which will be removed as a
+  # cleanup measure. Please be sure to update this list as the cache filename
+  # changes between versions of this script!
+  OLD_CACHE_FILES="/var/cache/vpd/full.cache /var/cache/offers/vpd_echo.txt \
+                   /var/cache/vpd/full-v2.cache"
 
-# If the cache file is missing, generate it.
-if [ ! -f "${CACHE_FILE}" ]; then
-  # If the file exists, but was not regular.
-  rm -f "${CACHE_FILE}"
-  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
-  args_whole="-p host -r ${BIOS_TMP}"
-  if [ -n "${debug_log}" ]; then
-    echo "-------------------" "$(date)" >> "${debug_log}"
-    flashrom ${args_partial} -V -V -V >> "${debug_log}" 2>&1 ||
-      flashrom ${args_whole} -V -V -V >> "${debug_log}" 2>&1 ||
-      exit 1
-  else
-    flashrom ${args_partial} ||
-      flashrom ${args_whole} ||
-      exit 1
+  # Files for temporary and final storage of filtered VPD data. Note that the
+  # temporary file is under ${CACHE_DIR} to ensure that renaming (mv) is atomic.
+  FILTERED_TMP=$(mktemp --tmpdir=${CACHE_DIR} filtered.txt.tmp.XXXXXXXXXX)
+  FILTERED_FILE="${CACHE_DIR}/filtered.txt"
+  FILTERED_LINK="/var/log/vpd_2.0.txt"
+
+  # Remove the temp file, which has full data if the script terminates early.
+  trap "rm -f ${BIOS_TMP} ${FILTERED_TMP} ${CACHE_TMP} ${ECHO_COUPON_TMP}" EXIT
+
+  if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
+    debug_log="/tmp/dump_vpd_log.debug"
   fi
 
-  generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
-  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >> "${CACHE_TMP}"
-  generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
-  atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
+  # Cleanup: remove old versions of the VPD cache file; this ensures that we
+  # don't have unused VPD data lying around, which takes unnecessary space,
+  # might lead to stale VPD log extraction (in case of a script version
+  # rollback), and is perceived as a potential security breach.
+  for f in ${OLD_CACHE_FILES}; do
+    rm -f "${f}"
+  done
 
-  # Remove existing filtered output file, forcing it to be regenerated.
-  rm -f "${FILTERED_FILE}"
-fi
+  # Remove output files if --clean or --force flagged.
+  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} -o \
+       "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
+    rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
+          "${FILTERED_LINK}" "${CACHE_LINK}"
 
-# If the ECHO coupon cache is missing, generate it.
-generate_echo_codes
-
-# Filter the full VPD output.
-if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
-     ! -f "${FILTERED_FILE}" ]; then
-  WHITELIST="
-    ActivateDate
-    block_devmode
-    check_enrollment
-    customization_id
-    initial_locale
-    initial_timezone
-    keyboard_layout
-    model_name
-    panel_backlight_max_nits
-    region
-    rlz_brand_code
-    sku_number"
-  sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" < "${CACHE_FILE}" \
-    > "${FILTERED_TMP}"
-
-  # Rename temporary into permanent output if --stdout was not used.
-  if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
-    set_world_readable "${FILTERED_TMP}"
-    atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
+    # If --clean was flagged, we're done.
+    if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ]; then
+      exit 0
+    fi
   fi
-fi
 
-# Create symlinks if needed.
-migrate "${FILTERED_LINK}" "${FILTERED_FILE}"
-migrate "${CACHE_LINK}" "${CACHE_FILE}"
-migrate "${ECHO_COUPON_LINK}" "${ECHO_COUPON_FILE}"
+  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
+    FILTERED_TMP=/dev/stdout
+  elif [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
+    # --full must only be used with --stdout, to prevent accidental dumping of
+    # sensitive VPD info into a world-readable file. To be used as follows:
+    #
+    #   dump_vpd_log --full --stdout  >a_root_readable_file
+    #
+    echo "You specified --full without --stdout, aborting."
+    exit 1
+  fi
+
+  # If the cache file is missing, generate it.
+  if [ ! -f "${CACHE_FILE}" ]; then
+    # If the file exists, but was not regular.
+    rm -f "${CACHE_FILE}"
+    args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
+    args_whole="-p host -r ${BIOS_TMP}"
+    if [ -n "${debug_log}" ]; then
+      echo "-------------------" "$(date)" >>"${debug_log}"
+      flashrom ${args_partial} -V -V -V >>"${debug_log}" 2>&1 ||
+        flashrom ${args_whole} -V -V -V >>"${debug_log}" 2>&1 ||
+        exit 1
+    else
+      flashrom ${args_partial} ||
+        flashrom ${args_whole} ||
+        exit 1
+    fi
+
+    generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
+    echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${CACHE_TMP}"
+    generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
+    atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
+
+    # Remove existing filtered output file, forcing it to be regenerated.
+    rm -f "${FILTERED_FILE}"
+  fi
+
+  # If the ECHO coupon cache is missing, generate it.
+  generate_echo_codes
+
+  # Filter the full VPD output.
+  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
+       ! -f "${FILTERED_FILE}" ]; then
+    WHITELIST="
+      ActivateDate
+      block_devmode
+      check_enrollment
+      customization_id
+      initial_locale
+      initial_timezone
+      keyboard_layout
+      model_name
+      panel_backlight_max_nits
+      region
+      rlz_brand_code
+      sku_number"
+    sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" \
+      <"${CACHE_FILE}" >"${FILTERED_TMP}"
+
+    # Rename temporary into permanent output if --stdout was not used.
+    if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
+      set_world_readable "${FILTERED_TMP}"
+      atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
+    fi
+  fi
+
+  # Create symlinks if needed.
+  migrate "${FILTERED_LINK}" "${FILTERED_FILE}"
+  migrate "${CACHE_LINK}" "${CACHE_FILE}"
+  migrate "${ECHO_COUPON_LINK}" "${ECHO_COUPON_FILE}"
+}
+main "$@"
