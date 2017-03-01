@@ -60,18 +60,13 @@ set_world_enterable() {
 
 # Generate a sed filter for VPD output depending on the provided flag.
 #
-# $1: Boolean flag: permit all output (true) or apply whitelist (false).
-# $2, $3, ..: (Optional) Each parameter is one whitelisted key.
+# $1, $2, ..: Each parameter is one whitelisted key.
 generate_sed_filter() {
   local output=''
-  local all_output="$1"
-  shift
-  if [ "$all_output" -eq "${FLAGS_FALSE}" ]; then
-    for field in $*; do
-      output="${output}"'/^"'"${field}"'"=".*"$/p;'
-    done
-    output="${output}"'/^.*/d;'
-  fi
+  for field in $*; do
+    output="${output}"'/^"'"${field}"'"=".*"$/p;'
+  done
+  output="${output}"'/^.*/d;'
 
   echo "${output}"
 }
@@ -105,8 +100,8 @@ generate_echo_codes() {
   rm -f "${ECHO_COUPON_FILE}"
   rm -f "${ECHO_COUPON_LINK}"
 
-  sed -e "$(generate_sed_filter ${FLAGS_FALSE} ${echo_code_keys})" \
-    <"${CACHE_FILE}" >"${ECHO_COUPON_TMP}"
+  sed -e "$(generate_sed_filter ${echo_code_keys})" "${CACHE_FILE}" \
+    >"${ECHO_COUPON_TMP}"
   atomic_move "${ECHO_COUPON_TMP}" "${ECHO_COUPON_FILE}"
   set_conservative_perm "${ECHO_COUPON_FILE}"
 
@@ -116,6 +111,34 @@ generate_echo_codes() {
   chown -R root:chronos "${coupon_dir}" "${link_dir}"
   chmod -R g+rx "${coupon_dir}" "${link_dir}"
   chmod g-x "${ECHO_COUPON_FILE}"
+}
+
+# Generate the filtered file.
+generate_filtered_file() {
+  local whitelist="
+    ActivateDate
+    block_devmode
+    check_enrollment
+    customization_id
+    initial_locale
+    initial_timezone
+    keyboard_layout
+    model_name
+    panel_backlight_max_nits
+    region
+    rlz_brand_code
+    sku_number"
+
+  if [ -f "${FILTERED_FILE}" ]; then
+    return
+  fi
+
+  # If the file exists, but was not regular.
+  rm -f "${FILTERED_FILE}"
+  sed -e "$(generate_sed_filter ${whitelist})" "${CACHE_FILE}" \
+    >"${FILTERED_TMP}"
+  set_world_readable "${FILTERED_TMP}"
+  atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
 }
 
 # Invoke the VPD utility for generating full VPD content.
@@ -229,9 +252,8 @@ main() {
     fi
   fi
 
-  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
-    FILTERED_TMP=/dev/stdout
-  elif [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ] &&
+     [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
     # --full must only be used with --stdout, to prevent accidental dumping of
     # sensitive VPD info into a world-readable file. To be used as follows:
     #
@@ -270,29 +292,15 @@ main() {
   # If the ECHO coupon cache is missing, generate it.
   generate_echo_codes
 
-  # Filter the full VPD output.
-  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} -o \
-       ! -f "${FILTERED_FILE}" ]; then
-    WHITELIST="
-      ActivateDate
-      block_devmode
-      check_enrollment
-      customization_id
-      initial_locale
-      initial_timezone
-      keyboard_layout
-      model_name
-      panel_backlight_max_nits
-      region
-      rlz_brand_code
-      sku_number"
-    sed -e "$(generate_sed_filter ${FLAGS_full} ${WHITELIST})" \
-      <"${CACHE_FILE}" >"${FILTERED_TMP}"
+  # If filter file is missing, generate it.
+  generate_filtered_file
 
-    # Rename temporary into permanent output if --stdout was not used.
-    if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ]; then
-      set_world_readable "${FILTERED_TMP}"
-      atomic_move "${FILTERED_TMP}" "${FILTERED_FILE}"
+  # Print to stdout if needed.
+  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
+    if [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
+      cat "${CACHE_FILE}"
+    else
+      cat "${FILTERED_FILE}"
     fi
   fi
 
