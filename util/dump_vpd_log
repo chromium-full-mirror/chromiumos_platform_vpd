@@ -243,7 +243,7 @@ add_temp_files() {
 cleanup() {
   if [ -n "${TEMP_FILES}" ]; then
     # TEMP_FILES is a list so we don't quote it.
-    rm -f ${TEMP_FILES}
+    rm -rf ${TEMP_FILES}
     TEMP_FILES=""
   fi
 }
@@ -257,6 +257,11 @@ main() {
   # A list of temporary files to delete.
   TEMP_FILES=""
 
+  # A flag to indicate if we are caching VPD data in /tmp. This is used for
+  # scripts calling dump_vpd_log very early before stateful partition was
+  # mounted (so we can't really cache data on disk).
+  IS_CACHE_IN_TMP="${FLAGS_FALSE}"
+
   # Remove the temp files.
   trap cleanup EXIT
 
@@ -266,7 +271,17 @@ main() {
   CACHE_DIR="/mnt/stateful_partition/unencrypted/cache/vpd"
 
   # mktemp depends on existence of ${CACHE_DIR}.
-  mkdir -p "${CACHE_DIR}"
+  if ! mkdir -p "${CACHE_DIR}"; then
+    if [ "${FLAGS_stdout}" -eq "${FLAGS_TRUE}" ]; then
+      echo "Warning: ${CACHE_DIR} not available, VPD won't be cached." >&2
+      CACHE_DIR="$(mktemp -d)"
+      IS_CACHE_IN_TMP="${FLAGS_TRUE}"
+      add_temp_files "${CACHE_DIR}"
+    else
+      echo "ERROR: ${CACHE_DIR} not available."
+      exit 1
+    fi
+  fi
   set_world_enterable "${CACHE_DIR}"
 
   # Files for final cache of full VPD data.
@@ -324,7 +339,6 @@ main() {
 
   # Generate missing files.
   generate_cache_file
-  generate_echo_codes
   generate_filtered_file
 
   # Print to stdout if needed.
@@ -335,6 +349,14 @@ main() {
       cat "${FILTERED_FILE}"
     fi
   fi
+
+  if [ "${IS_CACHE_IN_TMP}" -eq "${FLAGS_TRUE}" ]; then
+    exit 0
+  fi
+
+  # generate_echo_codes need to setup link folder with different permissions so
+  # it has to be invoked only if we are not caching in /tmp.
+  generate_echo_codes
 
   # Create symlinks if needed.
   migrate "${FILTERED_LINK}" "${FILTERED_FILE}"
