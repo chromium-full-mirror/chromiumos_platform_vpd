@@ -83,6 +83,35 @@ atomic_move() {
   mv -f "${source}" "${dest}"
 }
 
+generate_cache_file() {
+  if [ -f "${CACHE_FILE}" ]; then
+    return
+  fi
+
+  # If the file exists, but was not regular.
+  rm -f "${CACHE_FILE}"
+  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
+  args_whole="-p host -r ${BIOS_TMP}"
+  if [ -n "${debug_log}" ]; then
+    echo "-------------------" "$(date)" >>"${debug_log}"
+    flashrom ${args_partial} -V -V -V >>"${debug_log}" 2>&1 ||
+      flashrom ${args_whole} -V -V -V >>"${debug_log}" 2>&1 ||
+      exit 1
+  else
+    flashrom ${args_partial} ||
+      flashrom ${args_whole} ||
+      exit 1
+  fi
+
+  generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
+  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${CACHE_TMP}"
+  generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
+  atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
+
+  # Remove existing filtered output file, forcing it to be regenerated.
+  rm -f "${FILTERED_FILE}"
+}
+
 # Generate the coupon code file containing cached VPD ECHO attributes.
 generate_echo_codes() {
   local echo_code_keys="
@@ -263,36 +292,9 @@ main() {
     exit 1
   fi
 
-  # If the cache file is missing, generate it.
-  if [ ! -f "${CACHE_FILE}" ]; then
-    # If the file exists, but was not regular.
-    rm -f "${CACHE_FILE}"
-    args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${BIOS_TMP}"
-    args_whole="-p host -r ${BIOS_TMP}"
-    if [ -n "${debug_log}" ]; then
-      echo "-------------------" "$(date)" >>"${debug_log}"
-      flashrom ${args_partial} -V -V -V >>"${debug_log}" 2>&1 ||
-        flashrom ${args_whole} -V -V -V >>"${debug_log}" 2>&1 ||
-        exit 1
-    else
-      flashrom ${args_partial} ||
-        flashrom ${args_whole} ||
-        exit 1
-    fi
-
-    generate_full_text "${BIOS_TMP}" "RO_VPD" "${CACHE_TMP}"
-    echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${CACHE_TMP}"
-    generate_full_text "${BIOS_TMP}" "RW_VPD" "${CACHE_TMP}"
-    atomic_move "${CACHE_TMP}" "${CACHE_FILE}"
-
-    # Remove existing filtered output file, forcing it to be regenerated.
-    rm -f "${FILTERED_FILE}"
-  fi
-
-  # If the ECHO coupon cache is missing, generate it.
+  # Generate missing files.
+  generate_cache_file
   generate_echo_codes
-
-  # If filter file is missing, generate it.
   generate_filtered_file
 
   # Print to stdout if needed.
