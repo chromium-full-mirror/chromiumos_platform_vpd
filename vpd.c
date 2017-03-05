@@ -289,6 +289,21 @@ static uint8_t  *read_string_from_file(const char *file_name)
 
 
 /*
+ * Check if given key name is compliant to recommended format.
+ */
+static vpd_err_t checkKeyName(const uint8_t *name) {
+  unsigned char c;
+  while ((c = *name++)) {
+    if (!(isalnum(c) || c == '_')) {
+      fprintf(stderr, "[ERROR] VPD key name does not allow char [%c].\n", c);
+      return VPD_ERR_PARAM;
+    }
+  }
+  return VPD_OK;
+}
+
+
+/*
  * Given a key=value string, this function parses it and adds to arugument
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
@@ -325,7 +340,9 @@ int parseString(const uint8_t *string, int read_from_file) {
     }
   }
 
-  setString(&set_argument, key, value, pad_value_len);
+  retval = checkKeyName(key);
+  if (retval == VPD_OK)
+    setString(&set_argument, key, value, pad_value_len);
 
   free(key);
   if (file_contents)
