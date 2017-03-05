@@ -60,8 +60,8 @@ indicates the next byte has lower significant 7 bits in length.
 The following example shows how to encode strings of normal length:
 
     <01> <04> "UUID"          <10> "0123456789ABCDEF"
-    <01> <07> "3G IMEI"       <0E> "AABBBBBB-CC-DD"
-    <01> <0D> "Ethernet MAC"  <06> <2A><02><03><B3><D5><7C>
+    <01> <07> "3G_IMEI"       <0E> "AABBBBBB-CC-DD"
+    <01> <0C> "ethernet_mac"  <06> <2A><02><03><B3><D5><7C>
     <00>   // the terminator
 
 The following example shows how to encode longer strings, like "any=Very long
@@ -98,10 +98,10 @@ the comment line preceding the example:
 ```sh
   # Dump all key-pairs in RO_VPD partition on the flash
   % vpd -l
-    "Product S/N"="20100915SKU0015566"
+    "serial_number"="20100915SKU0015566"
     "SKU"="SKU0001"
     "UUID"="0001-0203_04050607"
-    "Ethernet MAC"="2A:45:29_66:D4:57"
+    "ethernet_mac"="2A:45:29_66:D4:57"
 
   # Dump RW_VPD partition
   % vpd -l -i "RW_VPD"
@@ -120,9 +120,9 @@ the comment line preceding the example:
   # \0 at tail.
 
   # Add tons of key-value pairs at one time.
-  % vpd -f vpd.bin -p 32 -s "Product S/N"="20101214_MARIO_1122" \
-                   -p 16 -s "MAC"="11:22:33:44:55:66" \
-                         -s "MB S/N"="2037291738734" \
+  % vpd -f vpd.bin -p 32 -s "serial_number"="20101214_MARIO_1122" \
+                   -p 16 -s "ethernet_mac"="11:22:33:44:55:66" \
+                         -s "mlb_serial_number"="2037291738734" \
                    -p 8  -s "UUID"="2323-3524-2344364-133456" \
                    ...
 
@@ -132,12 +132,12 @@ the comment line preceding the example:
   vpd -i "RW_VPD" -O -s "ActivateDate=2011/03/02 11:22:33"
 
   # Read a specific key-value pair. Specially useful in shell script.
-  % vpd -g "Mainboard S/N"
+  % vpd -g "mlb_serial_number"
     MB20100914_012345
   # no key string and no quotes in output.
 
   # Delete a key-value pair
-  % vpd -f vpd.bin -d "3G IMEI"
+  % vpd -f vpd.bin -d "3G_IMEI"
 ```
 
 ## Partition names
@@ -157,7 +157,11 @@ Note that the naming convention includes the underscore ( _ ) character.
 Although VPD 2.0 doesn't define a fixed data structure, Google requires partners
 to include specific VPD fields in the AP firmware image, for example
 `serial_number`. The list of VPD fields are available in the ChromeOS Partner
-Site.
+Site document "VPD Field Requirements".
+
+In theory the VPD name can be arbitrary string, but in order to simplify
+processing, the utility only accepts names in CamelCase or lower_underline,
+i.e., in regular expression `[a-zA-Z0-9_]+`.
 
 ## Appendix A
 
