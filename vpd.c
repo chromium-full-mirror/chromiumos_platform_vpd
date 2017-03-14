@@ -294,7 +294,7 @@ static uint8_t *read_string_from_file(const char *file_name)
 static vpd_err_t checkKeyName(const uint8_t *name) {
   unsigned char c;
   while ((c = *name++)) {
-    if (!(isalnum(c) || c == '_')) {
+    if (!(isalnum(c) || c == '_' || c == '.')) {
       fprintf(stderr, "[ERROR] VPD key name does not allow char [%c].\n", c);
       return VPD_ERR_PARAM;
     }
