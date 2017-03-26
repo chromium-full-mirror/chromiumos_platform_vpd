@@ -468,7 +468,7 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
     fprintf(stderr, "[WARN] Cannot read full BIOS.\n");
     return VPD_ERR_ROM_READ;
   }
-  assert(buf = readFileContent(filename, &buf_size));
+  assert((buf = readFileContent(filename, &buf_size)));
   if (findVpdPartition(buf, buf_size, offset, size)) {
     fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
     retval = VPD_ERR_INVALID;
