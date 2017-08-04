@@ -27,6 +27,7 @@ EMPTY_VPD=257
 EMPTY_DUMP_VPD=258
 EMPTY_RW_VPD=259
 
+# Read from RW_VPD.
 vpd_rw_output="$(vpd -i RW_VPD -l)"
 read_status=$?
 if [ "${read_status}" != 0 ]; then
@@ -34,6 +35,38 @@ if [ "${read_status}" != 0 ]; then
   exit "${read_status}"
 fi
 
+# Report unknown RW_VPD keys.
+unknown_count=0
+while IFS="=" read -r key remainder; do
+  local found=0
+  for known_key in                 \
+      ActivateDate                 \
+      block_devmode                \
+      check_enrollment             \
+      FCT1Finished                 \
+      first_active_omaha_ping_sent \
+      gbind_attribute              \
+      MACAddress                   \
+      Main                         \
+      mlb_serial_number            \
+      recovery_count               \
+      System_UUID                  \
+      ubind_attribute
+  do
+    if [ "${key}" = "\"${known_key}\"" ]; then
+      found=1
+      break
+    fi
+  done
+  if [ "${found}" != 1 ]; then
+    : $(( unknown_count += 1 ))
+  fi
+done << EOF
+${vpd_rw_output}
+EOF
+metrics_client -e Platform.Vpd.UnknownKeys "${unknown_count}" 10
+
+# Compare RW_VPD contents against dump_vpd_log output.
 dump_vpd_output="$(dump_vpd_log --stdout --full)"
 if [ -z "${dump_vpd_output}" ] && [ -z "${vpd_rw_output}" ]; then
   send_uma_result "${EMPTY_VPD}"
