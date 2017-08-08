@@ -42,16 +42,19 @@ while IFS="=" read -r key remainder; do
   for known_key in                 \
       ActivateDate                 \
       block_devmode                \
+      BTMac                        \
       check_enrollment             \
       FCT1Finished                 \
       first_active_omaha_ping_sent \
       gbind_attribute              \
+      injection_date               \
       MACAddress                   \
       Main                         \
       mlb_serial_number            \
       recovery_count               \
       System_UUID                  \
-      ubind_attribute
+      ubind_attribute              \
+      WiFiMac
   do
     if [ "${key}" = "\"${known_key}\"" ]; then
       found=1
