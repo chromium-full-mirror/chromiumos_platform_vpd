@@ -27,6 +27,34 @@ EMPTY_VPD=257
 EMPTY_DUMP_VPD=258
 EMPTY_RW_VPD=259
 
+# Documented VPD keys.
+# https://www.google.com/chromeos/partner/fe/docs/factory/vpd.html
+DOCUMENTED_VPD_KEYS="
+  ActivateDate
+  block_devmode
+  check_enrollment
+  first_active_omaha_ping_sent
+  gbind_attribute
+  ubind_attribute"
+
+# Undocumented but well-known VPD keys. Keeping those for the time being.
+UNDOCUMENTED_VPD_KEYS="
+  BIOS
+  BTMac
+  BT_MAC
+  MACAddress
+  System_UUID
+  WiFiMac
+  WLANID"
+
+# Deprecated VPD keys. Will be deleted eventually.
+DEPRECATED_VPD_KEYS="
+  FCT1Finished
+  injection_date
+  Main
+  mlb_serial_number
+  recovery_count"
+
 # Read from RW_VPD.
 vpd_rw_output="$(vpd -i RW_VPD -l)"
 read_status=$?
@@ -39,23 +67,8 @@ fi
 unknown_count=0
 while IFS="=" read -r key remainder; do
   local found=0
-  for known_key in                 \
-      ActivateDate                 \
-      block_devmode                \
-      BTMac                        \
-      check_enrollment             \
-      FCT1Finished                 \
-      first_active_omaha_ping_sent \
-      gbind_attribute              \
-      injection_date               \
-      MACAddress                   \
-      Main                         \
-      mlb_serial_number            \
-      recovery_count               \
-      System_UUID                  \
-      ubind_attribute              \
-      WiFiMac
-  do
+  for known_key in ${DOCUMENTED_VPD_KEYS} ${UNDOCUMENTED_VPD_KEYS} \
+      ${DEPRECATED_VPD_KEYS}; do
     if [ "${key}" = "\"${known_key}\"" ]; then
       found=1
       break
