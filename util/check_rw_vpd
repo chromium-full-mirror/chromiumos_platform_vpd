@@ -27,7 +27,7 @@ EMPTY_VPD=257
 EMPTY_DUMP_VPD=258
 EMPTY_RW_VPD=259
 
-# Documented VPD keys.
+# Documented RW_VPD keys.
 # https://www.google.com/chromeos/partner/fe/docs/factory/vpd.html
 DOCUMENTED_VPD_KEYS="
   ActivateDate
@@ -37,17 +37,56 @@ DOCUMENTED_VPD_KEYS="
   gbind_attribute
   ubind_attribute"
 
-# Undocumented but well-known VPD keys. Keeping those for the time being.
+# Samples of undocumented/deprecated RW_VPD keys:
+# celes:
+#   "injection_date"="2015-12-14 20:49:20"
+#   "Main"="1"
+#   "System_UUID"="991bf906-7571-4f63-a367-aa7f3879fb17"
+# clapper:
+#   "component.has_cellular"="False"
+#   "component.has_touchscreen"="True"
+#   "component.keyboard"="US_API"
+#   "MTM"="20425"
+#   "UUID"="325A2d25C48811E3ADFAF8A963268EC7"
+# kefka:
+#   "asset_tag"=""
+#   "gvc_mode"=""
+# lumpy:
+#   "MACAddress"=""
+# peach_pit:
+#   "BTMac"="24F5AA00D6FB"
+#   "WiFiMac"="24F5AA27081E"
+# peppy:
+#   "mlb_serial_number"="4260K0JTMBQC00009"
+# sand (also cyan, banjo, lars):
+#   "BIOS"="Google_Sand.9042.110.0"
+#   "BT_MAC"="E442A61026BE"
+#   "WLANID"="E442A61026BA"
+# snow:
+#   "FCT1Finished"=""
+#   "Main"="2"
+#   "System_UUID"="59cfeb4c-6a27-44bb-bd53-8909c240bed6"
+#   "UTCTime"="1"
+
+# Undocumented but well-known RW_VPD keys. Keeping those for the time being.
 UNDOCUMENTED_VPD_KEYS="
+  asset_tag
   BIOS
   BTMac
   BT_MAC
+  component.has_cellular
+  component.has_touchscreen
+  component.keyboard
+  gvc_mode
   MACAddress
+  MTM
   System_UUID
+  UTCTime
+  UUID
   WiFiMac
   WLANID"
 
-# Deprecated VPD keys. Will be deleted eventually.
+# Deprecated RW_VPD keys. Will be deleted eventually.
 DEPRECATED_VPD_KEYS="
   FCT1Finished
   injection_date
