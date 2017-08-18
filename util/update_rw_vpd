@@ -21,11 +21,15 @@
 
 set -e
 
+: "${VPD_IGNORE_CACHE:=}"
+
 # Read current VPD contents.
 declare -A vpd_contents
-while IFS='=' read -r key value; do
-  vpd_contents["${key}"]="${value}"
-done < <(dump_vpd_log --full --stdout)
+if [[ -z "${VPD_IGNORE_CACHE}" ]]; then
+  while IFS='=' read -r key value; do
+    vpd_contents["${key}"]="${value}"
+  done < <(dump_vpd_log --full --stdout)
+fi
 
 # Build up the VPD command line in the updates array.
 updates=()
@@ -43,7 +47,8 @@ while [[ "$#" -gt 0 ]]; do
   quoted_key="\"${key}\""
   if [[ -z "${value}" ]]; then
     # Delete ${key} if it exists.
-    if [[ "${vpd_contents[${quoted_key}]+set}" == "set"  ]]; then
+    if [[ "${vpd_contents[${quoted_key}]+set}" == "set" || \
+          -n "${VPD_IGNORE_CACHE}" ]]; then
       updates+=( -d "${key}" )
     fi
   else
@@ -55,6 +60,6 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 if [[ "${#updates[@]}" != 0 ]]; then
-  vpd -i RW_VPD "${updates[@]}" || exit $?
-  dump_vpd_log --force || exit $?
+  vpd -i RW_VPD "${updates[@]}"
+  dump_vpd_log --force
 fi
