@@ -48,6 +48,8 @@ DOCUMENTED_VPD_KEYS="
 #   "component.keyboard"="US_API"
 #   "MTM"="20425"
 #   "UUID"="325A2d25C48811E3ADFAF8A963268EC7"
+# guado:
+#   "oem_device_requisition"="none"
 # kefka:
 #   "asset_tag"=""
 #   "gvc_mode"=""
@@ -80,6 +82,7 @@ UNDOCUMENTED_VPD_KEYS="
   gvc_mode
   MACAddress
   MTM
+  oem_device_requisition
   System_UUID
   UTCTime
   UUID
