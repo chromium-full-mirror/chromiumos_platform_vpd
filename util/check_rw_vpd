@@ -4,28 +4,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
-# Checks if the VPD can be read and if the contents match the data from
-# dump_vpd_log. Send the results to UMA. The script has no input arguments.
+# Log UMA on whether the VPD can be read and whether the contents match the data
+# from dump_vpd_log and on the count of unknown RW_VPD keys.
 #
-# Supposed to run after the boot is done.
-#
-# Depends on dump_vpd_log script, specifically for the format of the output.
-
-send_uma_result() {
-  metrics_client -s Enterprise.VpdCheck "$1" &
-}
-
-#
-# main()
-#
-
-renice -n 19 $$
-
-SUCCESS=0
-CONTENT_MISMATCH=256
-EMPTY_VPD=257
-EMPTY_DUMP_VPD=258
-EMPTY_RW_VPD=259
+# The script has no input arguments and is supposed to run after the boot is
+# done.
 
 # Documented RW_VPD keys.
 # https://www.google.com/chromeos/partner/fe/docs/factory/vpd.html
@@ -37,7 +20,7 @@ DOCUMENTED_VPD_KEYS="
   gbind_attribute
   ubind_attribute"
 
-# Samples of undocumented/deprecated RW_VPD keys:
+# Undocumented/deprecated RW_VPD keys and where they have been observed:
 # celes:
 #   "injection_date"="2015-12-14 20:49:20"
 #   "Main"="1"
@@ -97,43 +80,59 @@ DEPRECATED_VPD_KEYS="
   mlb_serial_number
   recovery_count"
 
-# Read from RW_VPD.
-vpd_rw_output="$(vpd -i RW_VPD -l)"
-read_status=$?
-if [ "${read_status}" != 0 ]; then
-  send_uma_result "${read_status}"
-  exit "${read_status}"
-fi
+SUCCESS=0
+CONTENT_MISMATCH=256
+EMPTY_VPD=257
+EMPTY_DUMP_VPD=258
+EMPTY_RW_VPD=259
 
-# Report unknown RW_VPD keys.
-unknown_count=0
-while IFS="=" read -r key remainder; do
-  local found=0
-  for known_key in ${DOCUMENTED_VPD_KEYS} ${UNDOCUMENTED_VPD_KEYS} \
-      ${DEPRECATED_VPD_KEYS}; do
-    if [ "${key}" = "\"${known_key}\"" ]; then
-      found=1
-      break
-    fi
-  done
-  if [ "${found}" != 1 ]; then
-    : $(( unknown_count += 1 ))
+send_uma_result() {
+  metrics_client -s Enterprise.VpdCheck "$1" &
+}
+
+main() {
+  renice -n 19 $$
+
+  # Read from RW_VPD.
+  vpd_rw_output="$(vpd -i RW_VPD -l)"
+  read_status=$?
+  if [ "${read_status}" != 0 ]; then
+    send_uma_result "${read_status}"
+    exit "${read_status}"
   fi
-done << EOF
+
+  # Report unknown RW_VPD keys.
+  unknown_count=0
+  while IFS="=" read -r key remainder; do
+    local found=0
+    for known_key in ${DOCUMENTED_VPD_KEYS} ${UNDOCUMENTED_VPD_KEYS} \
+        ${DEPRECATED_VPD_KEYS}; do
+      if [ "${key}" = "\"${known_key}\"" ]; then
+        found=1
+        break
+      fi
+    done
+    if [ "${found}" != 1 ]; then
+      : $(( unknown_count += 1 ))
+    fi
+  done << EOF
 ${vpd_rw_output}
 EOF
-metrics_client -e Platform.Vpd.UnknownKeys "${unknown_count}" 10
+  metrics_client -e Platform.Vpd.UnknownKeys "${unknown_count}" 10
 
-# Compare RW_VPD contents against dump_vpd_log output.
-dump_vpd_output="$(dump_vpd_log --stdout --full)"
-if [ -z "${dump_vpd_output}" ] && [ -z "${vpd_rw_output}" ]; then
-  send_uma_result "${EMPTY_VPD}"
-elif [ -z "${dump_vpd_output}" ]; then
-  send_uma_result "${EMPTY_DUMP_VPD}"
-elif [ -z "${vpd_rw_output}" ]; then
-  send_uma_result "${EMPTY_RW_VPD}"
-elif [ -z "${dump_vpd_output##*$vpd_rw_output}" ]; then
-  send_uma_result "${SUCCESS}"
-else
-  send_uma_result "${CONTENT_MISMATCH}"
-fi
+  # Compare RW_VPD contents against dump_vpd_log output.
+  dump_vpd_output="$(dump_vpd_log --stdout --full)"
+  if [ -z "${dump_vpd_output}" ] && [ -z "${vpd_rw_output}" ]; then
+    send_uma_result "${EMPTY_VPD}"
+  elif [ -z "${dump_vpd_output}" ]; then
+    send_uma_result "${EMPTY_DUMP_VPD}"
+  elif [ -z "${vpd_rw_output}" ]; then
+    send_uma_result "${EMPTY_RW_VPD}"
+  elif [ -z "${dump_vpd_output##*$vpd_rw_output}" ]; then
+    send_uma_result "${SUCCESS}"
+  else
+    send_uma_result "${CONTENT_MISMATCH}"
+  fi
+}
+
+main "$@"
