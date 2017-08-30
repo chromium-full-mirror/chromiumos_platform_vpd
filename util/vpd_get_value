@@ -16,15 +16,6 @@ TMP_FILE=
 : "${VPD_IGNORE_CACHE:=}"
 : "${VPD_IGNORE_SYS_CACHE}"
 
-cat_if_exists() {
-  local file="$1"
-  if [ -f "${file}" ]; then
-    cat "${file}"
-    return 0
-  fi
-  return 1
-}
-
 main() {
   if [ "$#" != 1 ]; then
     echo "Usage: $0 key_name" >&2
@@ -39,8 +30,12 @@ main() {
   # Reading from /sys (works on ARM 3.18+, x86 4.4+) is most efficient;
   # otherwise we have to parse from VPD cache (maintained by dump_vpd_log).
   if [ -z "${VPD_IGNORE_SYS_CACHE}" ] && [ -d "${SYS_VPD}/ro" ]; then
-    cat_if_exists "${SYS_VPD}/ro/${key}" ||
-      cat_if_exists "${SYS_VPD}/rw/${key}"
+    for file in "${SYS_VPD}/ro/${key}" "${SYS_VPD}/rw/${key}"; do
+      if [ -f "${file}" ]; then
+        cat "${file}"
+        return 0
+      fi
+    done
   else
     if [ ! -f "${CACHE_FILE}" ]; then
       # /etc/init/vpd-log.conf was not executed, or cache corrupted, or if
