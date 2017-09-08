@@ -18,7 +18,8 @@ DOCUMENTED_VPD_KEYS="
   check_enrollment
   first_active_omaha_ping_sent
   gbind_attribute
-  ubind_attribute"
+  ubind_attribute
+  tpm_firmware_update_params"
 
 # Undocumented/deprecated RW_VPD keys and where they have been observed:
 # celes:
