@@ -897,6 +897,8 @@ static void usage(const char *progname) {
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
   printf("      --sh             Dump content for shell script.\n");
+  printf("      -0/--null-terminated\n");
+  printf("                       Dump content in null terminate format.\n");
   printf("      -O               Overwrite and re-format VPD partition.\n");
   printf("      -g <key>         Print value string only.\n");
   printf("      -d <key>         Delete a key.\n");
@@ -909,11 +911,10 @@ static void usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
-
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
-  const char *optstring = "hf:E:s:S:p:i:lOg:d:";
+  const char *optstring = "hf:E:s:S:p:i:lOg:d:0";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
@@ -926,6 +927,7 @@ int main(int argc, char *argv[]) {
     {"overwrite", 0, 0, 'O'},
     {"filter", 0, 0, 'g'},
     {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
+    {"null-terminated", 0, 0, '0'},
     {"delete", 0, 0, 'd'},
     {0, 0, 0, 0}
   };
@@ -1022,6 +1024,10 @@ int main(int argc, char *argv[]) {
                                  (const uint8_t *)"", 0);
         break;
 
+      case '0':
+        export_type = VPD_EXPORT_NULL_TERMINATE;
+        break;
+
       case 0:
         break;
 
@@ -1055,7 +1061,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (VPD_EXPORT_KEY_VALUE != export_type && !list_it) {
-    fprintf(stderr, "[ERROR] --sh can be set only if -l is set.\n");
+    fprintf(stderr,
+            "[ERROR] --sh/--null-terminated can be set only if -l is set.\n");
     retval = VPD_ERR_SYNTAX;
     goto teardown;
   }

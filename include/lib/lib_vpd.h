@@ -46,6 +46,7 @@ enum {  /* export_type */
   VPD_EXPORT_KEY_VALUE = 1,
   VPD_EXPORT_VALUE,
   VPD_EXPORT_AS_PARAMETER,
+  VPD_EXPORT_NULL_TERMINATE,
 };
 
 /* Callback for decodeVpdString to invoke. */

@@ -345,6 +345,34 @@ static vpd_err_t _exportStringPairAsParameter(const struct StringPair *str,
 }
 
 
+/*
+ * A helper function to export an instance of StringPair to the given buffer
+ * in a null terminate format, i.e. "<key>=<value>\0"
+ */
+static vpd_err_t _exportStringPairNullTerminate(const struct StringPair *str,
+                                                const int max_buf_len,
+                                                uint8_t *buf,
+                                                int *generated) {
+  int retval;
+
+  retval = _appendToBuf(str->key, strlen((const char*)str->key),
+                        max_buf_len, buf, generated);
+  if (VPD_OK != retval) return retval;
+
+  if (*generated + 1 > max_buf_len) return VPD_ERR_OVERFLOW;
+  buf[(*generated)++] = '=';
+
+  retval = _appendToBuf(str->value, _getStringPairValueLen(str),
+                        max_buf_len, buf, generated);
+  if (VPD_OK != retval) return retval;
+
+  if (*generated + 1 > max_buf_len) return VPD_ERR_OVERFLOW;
+  buf[(*generated)++] = '\0';
+
+  return VPD_OK;
+}
+
+
 /* Export the value field of the instance of StringPair. */
 vpd_err_t exportStringValue(const struct StringPair *str,
                             const int max_buf_len,
@@ -378,6 +406,8 @@ vpd_err_t exportContainer(const int export_type,
       retval = _exportStringPairKeyValue(str, max_buf_len, buf, &index);
     } else if (VPD_EXPORT_AS_PARAMETER == export_type) {
       retval = _exportStringPairAsParameter(str, max_buf_len, buf, &index);
+    } else if (VPD_EXPORT_NULL_TERMINATE == export_type) {
+      retval = _exportStringPairNullTerminate(str, max_buf_len, buf, &index);
     } else {
       /* this block shouldn't be reached */
       assert(0);

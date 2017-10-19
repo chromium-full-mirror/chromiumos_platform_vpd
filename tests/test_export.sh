@@ -48,6 +48,8 @@ test_image() {
   echo "  testing '${pack}' ..."
   unpack_bios "${pack}" "${TMP_DIR}"
 
+  local args=
+
   #
   # export a single vpd data
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -O"
@@ -59,7 +61,7 @@ test_image() {
   # export to shell script
   # Expect to get the same value after import back
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -O"
-  local args="-f ${BIOS}"
+  args="-f ${BIOS}"
   args="${args} -s 'a=aaa'"
   args="${args} -s $'b=b\\'b\\nb'"
   args="${args} -p 2 -s 'c=ccc'"
@@ -74,6 +76,15 @@ test_image() {
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g c" "cc"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g d" "ddd"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g e" ""
+
+  #
+  # export to null-terminated format
+  for arg_name in "--null-terminated" "-0"; do
+    RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -O"
+    args="-f ${BIOS} -s a=aaa -p 1 -s b=bbb -p 10 -s c=ccc -l ${arg_name}"
+    local expect_result='613d61616100623d6200633d63636300'
+    RUN "${VPD_OK}" "${BINARY} ${args} | xxd -ps" "${expect_result}"
+  done
 }
 
 main() {
