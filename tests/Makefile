@@ -39,5 +39,6 @@ test:
 	./test_seg_fault.sh
 	./test_equal.sh
 	./test_multi_add_del.sh
+	./test_export.sh
 
 	@echo "SUCCESS!"

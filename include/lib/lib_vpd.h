@@ -222,6 +222,21 @@ vpd_err_t deleteKey(struct PairContainer *container,
  */
 int lenOfContainer(const struct PairContainer *container);
 
+
+/*
+ * Export the value in raw format.
+ *
+ * The buf points to the first byte of buffer and *generated contains the number
+ * of bytes already existed in buffer.
+ *
+ * Afterward, the *generated will be plused on exact bytes this function has
+ * generated.
+ */
+vpd_err_t exportStringValue(const struct StringPair *str,
+                            const int max_buf_len,
+                            uint8_t *buf,
+                            int *generated);
+
 /*
  * Export the container content with human-readable text.
  *

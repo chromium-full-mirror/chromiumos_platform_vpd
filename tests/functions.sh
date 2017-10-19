@@ -72,13 +72,17 @@ EXPECT_EQ() {
 
 #
 # run command in $2 and expect exit code $1
+# if $3 is given, also checks whether the command output is equal to $3
 #
 RUN() {
   local rc
-
-  eval "$2" >/dev/null 2>&1 && rc=$? || rc=$?
+  local output
+  output=$(eval "$2" 2>/dev/null) && rc=$? || rc=$?
 
   EXPECT_EQ "$rc" "$1" "$2"
+  if [ $# -gt 2 ]; then
+    EXPECT_EQ "$output" "$3" "$2"
+  fi
 }
 
 #

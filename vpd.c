@@ -909,6 +909,7 @@ static void usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
+
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
@@ -933,7 +934,7 @@ int main(int argc, char *argv[]) {
   const char *save_file = NULL;
   const char *tmp_part_file = NULL;
   const char *tmp_full_file = NULL;
-  uint8_t *filter_str = NULL;
+  uint8_t *key_to_export = NULL;
   int write_back_to_flash = 0;
   int list_it = 0;
   int overwrite_it = 0;
@@ -1011,7 +1012,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'g':
-        filter_str = (uint8_t*)strdup(optarg);
+        key_to_export = (uint8_t*)strdup(optarg);
         break;
 
       case 'd':
@@ -1047,8 +1048,14 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  if (list_it && filter_str) {
+  if (list_it && key_to_export) {
     fprintf(stderr, "[ERROR] -l and -g must be mutually exclusive.\n");
+    retval = VPD_ERR_SYNTAX;
+    goto teardown;
+  }
+
+  if (VPD_EXPORT_KEY_VALUE != export_type && !list_it) {
+    fprintf(stderr, "[ERROR] --sh can be set only if -l is set.\n");
     retval = VPD_ERR_SYNTAX;
     goto teardown;
   }
@@ -1103,17 +1110,35 @@ int main(int argc, char *argv[]) {
     modified++;
   }
 
-  if (list_it || filter_str) {
+  /* Do -g */
+  if (key_to_export) {
+    struct StringPair* foundString = findString(&file, key_to_export, NULL);
+    if (NULL == foundString) {
+        fprintf(stderr, "findString(): Vpd data '%s' was not found.\n",
+                key_to_export);
+      retval = VPD_FAIL;
+      goto teardown;
+    } else {
+      uint8_t dump_buf[BUF_LEN * 2];
+      int dump_len = 0;
+
+      retval = exportStringValue(foundString,
+                                 sizeof(dump_buf), dump_buf, &dump_len);
+      if (VPD_OK != retval) {
+        fprintf(stderr, "exportStringValue(): Cannot export the value.\n");
+        goto teardown;
+      }
+
+      fwrite(dump_buf, dump_len, 1, stdout);
+    }
+  }
+
+  /* Do -l */
+  if (list_it) {
     /* Reserve larger size because the exporting generates longer string than
      * the encoded data. */
-    uint8_t list_buf[BUF_LEN * 2];
-    char para_buf[BUF_LEN] = "";
+    uint8_t list_buf[BUF_LEN * 5 + 64];
     int list_len = 0;
-
-    if (filter_str) {
-      export_type = VPD_EXPORT_VALUE;
-      setContainerFilter(&file, filter_str);
-    }
 
     retval = exportContainer(export_type, &file, sizeof(list_buf),
                              list_buf, &list_len);
@@ -1123,21 +1148,15 @@ int main(int argc, char *argv[]) {
     }
 
     /* Export necessary program parameters */
-    if (export_type == VPD_EXPORT_AS_PARAMETER) {
-      char tmp_filename[BUF_LEN] = "";
-      char tmp_filter[BUF_LEN] = "";
+    if (VPD_EXPORT_AS_PARAMETER == export_type) {
+      printf("%s%s -i %s \\\n",
+             SH_COMMENT, argv[0], fmap_vpd_area_name);
 
       if (filename)
-        snprintf(tmp_filename, sizeof(tmp_filename), "-f %s", filename);
-      if (filter_str)
-        snprintf(tmp_filter, sizeof(tmp_filter), "-g %s", filter_str);
-
-      snprintf(para_buf, sizeof(para_buf), "%s%s -i %s %s %s \\\n",
-               SH_COMMENT, argv[0], fmap_vpd_area_name,
-               tmp_filename, tmp_filter);
+        printf("    -f %s \\\n", filename);
     }
 
-    printf("%s%s", para_buf, list_buf);
+    fwrite(list_buf, list_len, 1, stdout);
   }
 
   if (modified) {
@@ -1166,7 +1185,7 @@ int main(int argc, char *argv[]) {
 teardown:
   if (spd_data) free(spd_data);
   if (filename) free(filename);
-  if (filter_str) free(filter_str);
+  if (key_to_export) free(key_to_export);
   destroyContainer(&file);
   destroyContainer(&set_argument);
   destroyContainer(&del_argument);

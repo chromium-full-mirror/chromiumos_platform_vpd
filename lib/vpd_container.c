@@ -232,6 +232,131 @@ vpd_err_t setContainerFilter(struct PairContainer *container,
   return VPD_OK;
 }
 
+
+/*
+ * A helper function to append a sequence of bytes to the given buffer.  If
+ * the buffer size is not enough, this function will return VPD_ERR_OVERFLOW;
+ * otherwise it will return VPD_OK.
+ */
+static vpd_err_t _appendToBuf(const void *buf_to_append,
+                              int len,
+                              const int max_buf_len,
+                              uint8_t *buf,
+                              int *generated) {
+  if (*generated + len > max_buf_len) return VPD_ERR_OVERFLOW;
+  memcpy(&buf[*generated], buf_to_append, len);
+  *generated += len;
+  return VPD_OK;
+}
+
+
+/*
+ * A helper function to resolve the number of bytes to be exported for the
+ * value field of an instance of StringPair.
+ */
+static int _getStringPairValueLen(const struct StringPair *str) {
+  int len = strlen((const char*)(str->value));
+  return VPD_AS_LONG_AS == str->pad_len ? len : MIN(str->pad_len, len);
+}
+
+
+/* A helper function to export an instance of StringPair to the given buffer. */
+static vpd_err_t _exportStringPairKeyValue(const struct StringPair *str,
+                                           const int max_buf_len,
+                                           uint8_t *buf,
+                                           int *generated) {
+  const void *strs[5] = {"\"", str->key, "\"=\"", str->value, "\"\n"};
+  const int lens[5] = {
+      1, strlen((const char*)str->key), 3, _getStringPairValueLen(str), 2};
+
+  int retval;
+  int i;
+
+  for (i = 0; i < sizeof(lens) / sizeof(int); ++i) {
+    retval = _appendToBuf(strs[i], lens[i], max_buf_len, buf, generated);
+    if (VPD_OK != retval) {
+      break;
+    }
+  }
+
+  return retval;
+}
+
+
+/*
+ * A helper function to escape the special character in a string and then append
+ * the result into the buffer.
+ */
+static vpd_err_t _appendToBufWithShellEscape(const char *str_to_export,
+                                             const int max_buf_len,
+                                             uint8_t *buf,
+                                             int *generated) {
+  int len = strlen(str_to_export);
+  int i;
+  int retval;
+  for (i = 0; i < len; ++i) {
+    if ('\'' == str_to_export[i]) {
+      retval = _appendToBuf("'\"'\"'", 5, max_buf_len, buf, generated);
+    } else {
+      retval = _appendToBuf(str_to_export + i, 1,
+                            max_buf_len, buf, generated);
+    }
+    if (VPD_OK != retval) return retval;
+  }
+  return VPD_OK;
+}
+
+
+/*
+ * A helper function to export an instance of StringPair to the given buffer
+ * as the arguments for the vpd commandline tool.
+ */
+static vpd_err_t _exportStringPairAsParameter(const struct StringPair *str,
+                                              const int max_buf_len,
+                                              uint8_t *buf,
+                                              int *generated) {
+  int retval;
+
+  {
+    char extra_params[32];
+    snprintf(extra_params, sizeof(extra_params), "    -p %d -s ", str->pad_len);
+    retval = _appendToBuf(extra_params, strlen(extra_params),
+                          max_buf_len, buf, generated);
+    if (VPD_OK != retval) return retval;
+  }
+
+  if (*generated + 1 > max_buf_len) return VPD_ERR_OVERFLOW;
+  buf[(*generated)++] = '\'';
+
+  retval = _appendToBufWithShellEscape(
+      (const char*)str->key, max_buf_len, buf, generated);
+  if (VPD_OK != retval) return retval;
+
+  if (*generated + 1 > max_buf_len) return VPD_ERR_OVERFLOW;
+  buf[(*generated)++] = '=';
+
+  retval = _appendToBufWithShellEscape(
+      (const char*)str->value, max_buf_len, buf, generated);
+  if (VPD_OK != retval) return retval;
+
+  retval = _appendToBuf("' \\\n", 4, max_buf_len, buf, generated);
+
+  return retval;
+}
+
+
+/* Export the value field of the instance of StringPair. */
+vpd_err_t exportStringValue(const struct StringPair *str,
+                            const int max_buf_len,
+                            uint8_t *buf,
+                            int *generated) {
+  assert(generated);
+
+  return _appendToBuf(str->value, _getStringPairValueLen(str),
+                      max_buf_len, buf, generated);
+}
+
+
 /* Export the container content with human-readable text. */
 vpd_err_t exportContainer(const int export_type,
                           const struct PairContainer *container,
@@ -240,81 +365,25 @@ vpd_err_t exportContainer(const int export_type,
                           int *generated) {
   struct StringPair *str;
   int index;
+  int retval;
 
   assert(generated);
   index = *generated;
 
   for (str = container->first; str; str = str->next) {
-    int copy_len;
-
     if (str->filter_out)
       continue;
 
-    if (export_type == VPD_EXPORT_AS_PARAMETER) {
-      char pad_str[32];
-      int pad_len;
-
-      snprintf(pad_str, sizeof(pad_str), "-p %d -s ", str->pad_len);
-      pad_len = strlen(pad_str);
-      if ((index + pad_len) > max_buf_len) return VPD_ERR_OVERFLOW;
-      strcpy((char*)&buf[index], (char*)pad_str);
-      index += pad_len;
+    if (VPD_EXPORT_KEY_VALUE == export_type) {
+      retval = _exportStringPairKeyValue(str, max_buf_len, buf, &index);
+    } else if (VPD_EXPORT_AS_PARAMETER == export_type) {
+      retval = _exportStringPairAsParameter(str, max_buf_len, buf, &index);
+    } else {
+      /* this block shouldn't be reached */
+      assert(0);
     }
-
-    if (export_type != VPD_EXPORT_VALUE) {
-      /* double quote */
-      if ((index + 1 > max_buf_len)) return VPD_ERR_OVERFLOW;
-      buf[index++] = '"';
-
-      /* output key */
-      if ((index + strlen((char*)str->key)) > max_buf_len)
-        return VPD_ERR_OVERFLOW;
-      strcpy((char*)&buf[index], (char*)str->key);
-      index += strlen((char*)str->key);
-
-      /* double quote */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
-      buf[index++] = '"';
-
-      /* equal sign */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
-      buf[index++] = '=';
-
-      /* double quote */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
-      buf[index++] = '"';
-    }
-
-    /* output value */
-    if (str->pad_len != VPD_AS_LONG_AS)
-      copy_len = MIN(str->pad_len, strlen((char*)str->value));
-    else
-      copy_len = strlen((char*)str->value);
-    if ((index + copy_len) > max_buf_len) return VPD_FAIL;
-    memcpy(&buf[index], str->value, copy_len);
-    index += copy_len;
-
-    if (export_type != VPD_EXPORT_VALUE) {
-      /* double quote */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
-      buf[index++] = '"';
-
-      if (export_type == VPD_EXPORT_AS_PARAMETER) {
-        /* backslash */
-        if ((index + 2 > max_buf_len)) return VPD_FAIL;
-        buf[index++] = ' ';
-        buf[index++] = '\\';
-      }
-
-      /* new line */
-      if ((index + 1 > max_buf_len)) return VPD_FAIL;
-      buf[index++] = '\n';
-    }
+    if (VPD_OK != retval) return retval;
   }
-
-  /* null terminator */
-  if ((index + 1 > max_buf_len)) return VPD_FAIL;
-  buf[index++] = '\0';
 
   *generated = index;
 
