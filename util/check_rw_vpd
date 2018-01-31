@@ -35,6 +35,8 @@ DOCUMENTED_VPD_KEYS="
 #   "factory.device_data.smt_complete"="True"
 #   "MTM"="20425"
 #   "UUID"="325A2d25C48811E3ADFAF8A963268EC7"
+# eve:
+#   "battery_cto_disabled"="1"
 # gnawty:
 #   "ec_status"="False"
 # guado:
@@ -62,6 +64,7 @@ DOCUMENTED_VPD_KEYS="
 # Undocumented but well-known RW_VPD keys. Keeping those for the time being.
 UNDOCUMENTED_VPD_KEYS="
   asset_tag
+  battery_cto_disabled
   BIOS
   BTMac
   BT_MAC
