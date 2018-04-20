@@ -44,7 +44,9 @@ main() {
       dump_vpd_log --full --stdout >"${TMP_FILE}"
       CACHE_FILE="${TMP_FILE}"
     fi
-    sed -n "s/^\"${key}\"=\"\(.*\)\"\$/\1/p" "${CACHE_FILE}" | head -n 1
+    # Use printf(1) to suppress the newline that head(1) adds to the value.
+    printf '%s' "$(sed -n "s/^\"${key}\"=\"\(.*\)\"\$/\1/p" "${CACHE_FILE}" |
+      head -1)"
     if [ -e "${TMP_FILE}" ]; then
       rm -f "${TMP_FILE}"
     fi
