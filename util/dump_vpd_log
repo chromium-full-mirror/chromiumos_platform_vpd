@@ -170,8 +170,12 @@ generate_filtered_file() {
     keyboard_layout
     model_name
     panel_backlight_max_nits
+    Product_S\/N
     region
     rlz_brand_code
+    rlz_embargo_end_date
+    serial_number
+    should_send_rlz_ping
     sku_number"
 
   if [ -f "${FILTERED_FILE}" ]; then
