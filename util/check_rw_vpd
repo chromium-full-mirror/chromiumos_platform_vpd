@@ -18,8 +18,10 @@ DOCUMENTED_VPD_KEYS="
   check_enrollment
   first_active_omaha_ping_sent
   gbind_attribute
-  ubind_attribute
-  tpm_firmware_update_params"
+  rlz_embargo_end_date
+  should_send_rlz_ping
+  tpm_firmware_update_params
+  ubind_attribute"
 
 # Undocumented/deprecated RW_VPD keys and where they have been observed:
 # celes:
