@@ -29,7 +29,13 @@ main() {
 
   # Reading from /sys (works on ARM 3.18+, x86 4.4+) is most efficient;
   # otherwise we have to parse from VPD cache (maintained by dump_vpd_log).
-  if [ -z "${VPD_IGNORE_SYS_CACHE}" ] && [ -d "${SYS_VPD}/ro" ]; then
+  local sys_vpd_present=0
+  # VPD ro section may have no entries for reference boards; check for rw as
+  # well to prefer the fast path when possible.
+  if [ -d "${SYS_VPD}/ro" ] || [ -d "${SYS_VPD}/rw" ]; then
+    sys_vpd_present=1
+  fi
+  if [ -z "${VPD_IGNORE_SYS_CACHE}" ] && [ "${sys_vpd_present}" = "1" ]; then
     for file in "${SYS_VPD}/ro/${key}" "${SYS_VPD}/rw/${key}"; do
       if [ -f "${file}" ]; then
         cat "${file}"
