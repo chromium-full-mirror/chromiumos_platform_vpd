@@ -16,6 +16,7 @@ DOCUMENTED_VPD_KEYS="
   ActivateDate
   block_devmode
   check_enrollment
+  dock_passthrough
   first_active_omaha_ping_sent
   gbind_attribute
   rlz_embargo_end_date
