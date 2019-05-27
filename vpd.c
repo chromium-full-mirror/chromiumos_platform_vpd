@@ -708,7 +708,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
       for (;
            vpd_buf[index] != VPD_TYPE_TERMINATOR &&
            vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
-        retval = decodeToContainer(container, file_size, vpd_buf, &index);
+        retval = decodeToContainer(container, vpd_size, vpd_buf, &index);
         if (VPD_OK != retval)
         {
           fprintf(stderr, "decodeToContainer() error.\n");
