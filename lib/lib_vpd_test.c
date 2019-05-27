@@ -62,8 +62,8 @@ int testEncodeLen() {
 
 
 int testDecodeLen() {
-  int32_t length;
-  int32_t consumed;
+  uint32_t length;
+  uint32_t consumed;
 
   { /* max_len is 0. No more char in string. */
     uint8_t encoded[] = { 0x00 };
@@ -219,18 +219,18 @@ int testDecodeVpdString() {
     0x08, 'V', 'A', 'L', 'U', 'E', '\0', '\0', '\0',
   };
   unsigned char buf[256];
-  int consumed = 0;
+  uint32_t consumed = 0;
   struct PairContainer container;
+  int encode_consumed = 0;
 
   initContainer(&container);
   assert(VPD_OK == decodeToContainer(&container, sizeof(expected), expected,
                                      &consumed));
   assert(sizeof(expected) == consumed);
 
-  consumed = 0;
-  encodeContainer(&container, sizeof(buf), buf, &consumed);
-  assert(sizeof(expected) == consumed);
-  assert(!memcmp(expected, buf, consumed));
+  encodeContainer(&container, sizeof(buf), buf, &encode_consumed);
+  assert(sizeof(expected) == encode_consumed);
+  assert(!memcmp(expected, buf, encode_consumed));
 
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;

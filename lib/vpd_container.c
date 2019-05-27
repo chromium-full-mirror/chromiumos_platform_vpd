@@ -187,9 +187,9 @@ vpd_err_t encodeContainer(const struct PairContainer *container,
 }
 
 static vpd_err_t callbackDecodeToContainer(const uint8_t *key,
-                                           int32_t key_len,
+                                           uint32_t key_len,
                                            const uint8_t *value,
-                                           int32_t value_len,
+                                           uint32_t value_len,
                                            void *arg) {
   struct PairContainer *container = (struct PairContainer*)arg;
   uint8_t *key_string = (uint8_t*)malloc(key_len + 1),
@@ -204,9 +204,9 @@ static vpd_err_t callbackDecodeToContainer(const uint8_t *key,
 }
 
 vpd_err_t decodeToContainer(struct PairContainer *container,
-                            const int32_t max_len,
+                            const uint32_t max_len,
                             const uint8_t *input_buf,
-                            int32_t *consumed) {
+                            uint32_t *consumed) {
   return decodeVpdString(max_len, input_buf, consumed,
                          callbackDecodeToContainer, (void*)container);
 }

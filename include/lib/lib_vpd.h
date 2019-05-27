@@ -50,8 +50,8 @@ enum {  /* export_type */
 };
 
 /* Callback for decodeVpdString to invoke. */
-typedef vpd_err_t VpdDecodeCallback(const uint8_t *key, int32_t key_len,
-                                    const uint8_t *value, int32_t value_len,
+typedef vpd_err_t VpdDecodeCallback(const uint8_t *key, uint32_t key_len,
+                                    const uint8_t *value, uint32_t value_len,
                                     void *arg);
 
 /* Container data types */
@@ -99,10 +99,10 @@ vpd_err_t encodeLen(
  * Returns VPD_FAIL if more bit is 1, but actually reaches the end of string.
  */
 vpd_err_t decodeLen(
-    const int32_t max_len,
+    const uint32_t max_len,
     const uint8_t *in,
-    int32_t *length,
-    int32_t *decoded_len);
+    uint32_t *length,
+    uint32_t *decoded_len);
 
 
 /* Encodes the terminator.
@@ -158,9 +158,9 @@ vpd_err_t encodeVpdString(
  * result.
  */
 vpd_err_t decodeVpdString(
-    const int32_t max_len,
+    const uint32_t max_len,
     const uint8_t *input_buf,
-    int32_t *consumed,
+    uint32_t *consumed,
     VpdDecodeCallback callback,
     void *callback_arg);
 
@@ -201,9 +201,9 @@ vpd_err_t encodeContainer(const struct PairContainer *container,
 /* Given a VPD blob, decode its entries and push into container.
  */
 vpd_err_t decodeToContainer(struct PairContainer *container,
-                            const int32_t max_len,
+                            const uint32_t max_len,
                             const uint8_t *input_buf,
-                            int32_t *consumed);
+                            uint32_t *consumed);
 
 /* Set filter for exporting functions.
  * If filter is NULL, resets the filter so that everything can be exported.

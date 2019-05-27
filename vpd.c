@@ -534,7 +534,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   uint8_t spd_uuid[16], vpd_2_0_uuid[16], vpd_1_2_uuid[16];
   int expected_handle;
   int table_len;
-  int index;
+  uint32_t index;
   vpd_err_t retval = VPD_OK;
 
   if (!(read_buf = readFileContent(filename, &file_size))) {

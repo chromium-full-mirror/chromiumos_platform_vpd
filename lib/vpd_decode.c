@@ -8,10 +8,10 @@
 #include "lib_vpd.h"
 
 vpd_err_t decodeLen(
-    const int32_t max_len,
+    const uint32_t max_len,
     const uint8_t *in,
-    int32_t *length,
-    int32_t *decoded_len) {
+    uint32_t *length,
+    uint32_t *decoded_len) {
   uint8_t more;
   int i = 0;
 
@@ -35,14 +35,14 @@ vpd_err_t decodeLen(
 /* Sequentially decodes type, key, and value.
  */
 vpd_err_t decodeVpdString(
-    const int32_t max_len,
+    const uint32_t max_len,
     const uint8_t *input_buf,
-    int32_t *consumed,
+    uint32_t *consumed,
     VpdDecodeCallback callback,
     void *callback_arg) {
   int type;
-  int32_t key_len, value_len;
-  int32_t decoded_len;
+  uint32_t key_len, value_len;
+  uint32_t decoded_len;
   const uint8_t *key, *value;
   vpd_err_t retval;
 
