@@ -32,6 +32,34 @@ vpd_err_t decodeLen(
   return VPD_OK;
 }
 
+static vpd_err_t decodeVpdEntry(
+    const uint32_t max_len,
+    const uint8_t *input_buf,
+    uint32_t *consumed,
+    const uint8_t **entry,
+    uint32_t *entry_len) {
+
+  vpd_err_t res;
+  uint32_t decoded_len;
+
+  res = decodeLen(max_len - *consumed, &input_buf[*consumed],
+                  entry_len, &decoded_len);
+  if (res != VPD_OK)
+    return res;
+  if (max_len - *consumed < decoded_len)
+    return VPD_ERR_OVERFLOW;
+
+  *consumed += decoded_len;
+  *entry = input_buf + *consumed;
+
+  /* entry_len is untrusted data and must be checked again. */
+  if (max_len - *consumed < *entry_len)
+    return VPD_ERR_OVERFLOW;
+
+  *consumed += *entry_len;
+  return VPD_OK;
+}
+
 /* Sequentially decodes type, key, and value.
  */
 vpd_err_t decodeVpdString(
@@ -42,7 +70,6 @@ vpd_err_t decodeVpdString(
     void *callback_arg) {
   int type;
   uint32_t key_len, value_len;
-  uint32_t decoded_len;
   const uint8_t *key, *value;
   vpd_err_t retval;
 
@@ -56,31 +83,13 @@ vpd_err_t decodeVpdString(
     case VPD_TYPE_STRING:
       (*consumed)++;
 
-      /* key */
-      retval = decodeLen(max_len - *consumed, &input_buf[*consumed],
-                         &key_len, &decoded_len);
-      if (VPD_OK != retval)
+      retval = decodeVpdEntry(max_len, input_buf, consumed, &key, &key_len);
+      if (retval != VPD_OK)
         return retval;
 
-      if (*consumed + decoded_len >= max_len)
-        return VPD_ERR_OVERFLOW;
-
-      *consumed += decoded_len;
-      key = &input_buf[*consumed];
-      *consumed += key_len;
-
-      /* value */
-      retval = decodeLen(max_len - *consumed, &input_buf[*consumed],
-                         &value_len, &decoded_len);
-      if (VPD_OK != retval)
+      retval = decodeVpdEntry(max_len, input_buf, consumed, &value, &value_len);
+      if (retval != VPD_OK)
         return retval;
-
-      if (*consumed + decoded_len > max_len)
-        return VPD_ERR_OVERFLOW;
-
-      *consumed += decoded_len;
-      value = &input_buf[*consumed];
-      *consumed += value_len;
 
       if (type == VPD_TYPE_STRING)
         return callback(key, key_len, value, value_len, callback_arg);

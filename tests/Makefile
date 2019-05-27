@@ -40,5 +40,6 @@ test:
 	./test_equal.sh
 	./test_multi_add_del.sh
 	./test_export.sh
+	./test_overflow.sh
 
 	@echo "SUCCESS!"
