@@ -67,7 +67,7 @@ int testDecodeLen() {
 
   { /* max_len is 0. No more char in string. */
     uint8_t encoded[] = { 0x00 };
-    assert(VPD_ERR_OVERFLOW == decodeLen(0, encoded, &length, &consumed));
+    assert(VPD_ERR_DECODE == decodeLen(0, encoded, &length, &consumed));
   }
   { /* just decode one byte */
     uint8_t encoded[] = { 0x00 };
@@ -83,15 +83,16 @@ int testDecodeLen() {
   }
   { /* more bit is set, but reachs end of string. */
     uint8_t encoded[] = { 0x80 };
-    assert(VPD_ERR_OVERFLOW == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(VPD_ERR_DECODE == decodeLen(
+        sizeof(encoded), encoded, &length, &consumed));
   }
   { /* decode 2 bytes, but reachs end of string. */
     uint8_t encoded[] = { 0x81, 0x02 };
-    assert(VPD_ERR_OVERFLOW == decodeLen(1, encoded, &length, &consumed));
+    assert(VPD_ERR_DECODE == decodeLen(1, encoded, &length, &consumed));
   }
   { /* more bit is set, but reachs end of string. */
     uint8_t encoded[] = { 0x81, 0x82 };
-    assert(VPD_ERR_OVERFLOW == decodeLen(sizeof(encoded), encoded, &length, &consumed));
+    assert(VPD_ERR_DECODE == decodeLen(sizeof(encoded), encoded, &length, &consumed));
   }
   { /* decode 2 bytes, normal case */
     uint8_t encoded[] = { 0x81, 0x02 };

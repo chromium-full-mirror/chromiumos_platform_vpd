@@ -9,6 +9,7 @@
 #define __LIB_VPD__
 
 #include <inttypes.h>
+#include "vpd_decode.h"
 
 enum vpd_err {
    /* These error codes are returned to the shell as exit codes. If they are
@@ -27,16 +28,10 @@ enum vpd_err {
   VPD_ERR_NOT_FOUND   = 9,   /* VPD not found */
   VPD_ERR_OVERFLOW    = 10,  /* boundary exceeded */
   VPD_ERR_INVALID     = 11,  /* error in VPD - possible corruption or bug */
+  VPD_ERR_DECODE      = 12,  /* error when decoding VPD blob */
 };
 
 typedef enum vpd_err vpd_err_t;
-
-enum {
-  VPD_TYPE_TERMINATOR = 0,
-  VPD_TYPE_STRING,
-  VPD_TYPE_INFO                = 0xfe,
-  VPD_TYPE_IMPLICIT_TERMINATOR = 0xff,
-};
 
 enum {
   VPD_AS_LONG_AS = -1,
@@ -50,9 +45,7 @@ enum {  /* export_type */
 };
 
 /* Callback for decodeVpdString to invoke. */
-typedef vpd_err_t VpdDecodeCallback(const uint8_t *key, uint32_t key_len,
-                                    const uint8_t *value, uint32_t value_len,
-                                    void *arg);
+typedef vpd_decode_callback VpdDecodeCallback;
 
 /* Container data types */
 struct StringPair {

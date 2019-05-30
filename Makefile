@@ -45,6 +45,7 @@ LIB_OBJS= \
 	lib/flashrom.o \
 	lib/fmap.o \
 	lib/lib_smbios.o \
+	lib/lib_vpd.o \
 	lib/vpd_container.o \
 	lib/vpd_decode.o \
 	lib/vpd_encode.o \

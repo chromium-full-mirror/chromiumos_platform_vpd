@@ -186,7 +186,7 @@ vpd_err_t encodeContainer(const struct PairContainer *container,
   return VPD_OK;
 }
 
-static vpd_err_t callbackDecodeToContainer(const uint8_t *key,
+static int callbackDecodeToContainer(const uint8_t *key,
                                            uint32_t key_len,
                                            const uint8_t *value,
                                            uint32_t value_len,
@@ -200,7 +200,7 @@ static vpd_err_t callbackDecodeToContainer(const uint8_t *key,
   key_string[key_len] = '\0';
   value_string[value_len] = '\0';
   setString(container, key_string, value_string, value_len);
-  return VPD_OK;
+  return VPD_DECODE_OK;
 }
 
 vpd_err_t decodeToContainer(struct PairContainer *container,

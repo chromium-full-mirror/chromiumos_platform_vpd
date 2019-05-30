@@ -22,7 +22,7 @@ test_image() {
   #
   # Test -l (without parameter) case.
   # Expect error for invalid parameter.
-  RUN ${VPD_ERR_OVERFLOW} "${BINARY} -f ${BIOS} -l"
+  RUN ${VPD_ERR_DECODE} "${BINARY} -f ${BIOS} -l"
 }
 
 main() {
