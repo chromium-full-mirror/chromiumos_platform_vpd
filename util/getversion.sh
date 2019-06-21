@@ -41,19 +41,21 @@ git_version() {
 
     # are there local changes in the client?
     if  git status | \
-	egrep '^# Change(s to be committed|d but not updated):$' > /dev/null
+	grep -E '^# Change(s to be committed|d but not updated):$' > /dev/null
     then
         timestamp=$(date "${date_format} +")
     else
 	# No local changes, get date of the last log record.
-	local last_commit_date=$(git log | head -3 | grep '^Date:' | \
+	local last_commit_date
+	last_commit_date=$(git log | head -3 | grep '^Date:' | \
 	    awk '{print $3" "$4" "$6" "$5" "$7}')
 	timestamp=$(date --utc --date "${last_commit_date}" \
 	    "${date_format} UTC")
     fi
     # Get remote server name (only the first line of `git remote' is
     # considered.
-    local server=$(git remote -v |\
+    local server
+    server=$(git remote -v |\
         awk '{
              if (!server) {
                 server = $2;
@@ -62,7 +64,8 @@ git_version() {
         }')
 
     # Get the commit hash.
-    local commit=$(git log --oneline | head -1 | awk '{print $1}')
+    local commit
+    commit=$(git log --oneline | head -1 | awk '{print $1}')
 
     # Generate the version string.
     echo "${server} : ${commit} : ${timestamp}"

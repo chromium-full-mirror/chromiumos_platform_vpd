@@ -62,8 +62,8 @@ set_world_enterable() {
 #
 # $1, $2, ..: Each parameter is one whitelisted key.
 generate_sed_filter() {
-  local output=''
-  for field in $*; do
+  local output='' field
+  for field in "$@"; do
     output="${output}"'/^"'"${field}"'"=".*"$/p;'
   done
   output="${output}"'/^.*/d;'
@@ -83,35 +83,43 @@ atomic_move() {
   mv -f "${source}" "${dest}"
 }
 
+flash_partial() {
+  flashrom -p host -i FMAP -i RO_VPD -i RW_VPD -r "$@"
+}
+
+flash_whole() {
+  flashrom -p host -r "$@"
+}
+
 generate_cache_file() {
   if [ -f "${CACHE_FILE}" ]; then
     return
   fi
   # A temporary file used for caching the results of flashrom across subsequent
   # invocations of the vpd utility within this script.
-  local bios_tmp="$(mktemp)"
+  local bios_tmp
+  bios_tmp="$(mktemp)"
   add_temp_files "${bios_tmp}"
 
   # The temporary file is under same folder as ${CACHE_FILE} to ensure that
   # renaming (mv) is atomic.
-  local cache_tmp="$(mktemp --tmpdir="$(dirname "${CACHE_FILE}")" \
+  local cache_tmp
+  cache_tmp="$(mktemp --tmpdir="$(dirname "${CACHE_FILE}")" \
                      full-v2.txt.tmp.XXXXXXXXXX)"
   add_temp_files "${cache_tmp}"
 
   # If the file exists, but was not regular.
   rm -f "${CACHE_FILE}"
-  args_partial="-p host -i FMAP -i RO_VPD -i RW_VPD -r ${bios_tmp}"
-  args_whole="-p host -r ${bios_tmp}"
   if [ -n "${debug_log}" ]; then
     echo "-------------------" "$(date)" >>"${debug_log}"
-    flashrom ${args_partial} -V -V -V >>"${debug_log}" 2>&1 ||
-      flashrom ${args_whole} -V -V -V >>"${debug_log}" 2>&1 ||
+    flash_partial "${bios_tmp}" -V -V -V >>"${debug_log}" 2>&1 ||
+      flash_whole "${bios_tmp}" -V -V -V >>"${debug_log}" 2>&1 ||
       exit 1
   else
     # flashrom may print messages on stdout (for example, "Reading flash...
     # SUCCESS") so we do want to prevent that for --stdout.
-    flashrom ${args_partial} 1>&2 ||
-      flashrom ${args_whole} 1>&2 ||
+    flash_partial "${bios_tmp}" 1>&2 ||
+      flash_whole "${bios_tmp}" 1>&2 ||
       exit 1
   fi
 
@@ -126,26 +134,29 @@ generate_cache_file() {
 
 # Generate the coupon code file containing cached VPD ECHO attributes.
 generate_echo_codes() {
-  local echo_code_keys="
-    ubind_attribute
-    gbind_attribute"
+  # Echo code keys.
+  set -- \
+    ubind_attribute \
+    gbind_attribute
 
   if [ -f "${ECHO_COUPON_FILE}" ]; then
     return
   fi
-  local coupon_dir="$(dirname ${ECHO_COUPON_FILE})"
-  local link_dir="$(dirname ${ECHO_COUPON_LINK})"
+  local coupon_dir link_dir
+  coupon_dir="$(dirname "${ECHO_COUPON_FILE}")"
+  link_dir="$(dirname "${ECHO_COUPON_LINK}")"
   mkdir -p "${coupon_dir}" "${link_dir}"
 
   # The temporary file is under same folder as ${ECHO_COUPON_FILE} to ensure
   # that renaming (mv) is atomic.
-  local tmpfile="$(mktemp --tmpdir="${coupon_dir}" vpd_echo.txt.tmp.XXXXXXXXXX)"
+  local tmpfile
+  tmpfile="$(mktemp --tmpdir="${coupon_dir}" vpd_echo.txt.tmp.XXXXXXXXXX)"
 
   # If the file exists but isn't regular, it will be removed first.
   rm -f "${ECHO_COUPON_FILE}"
   rm -f "${ECHO_COUPON_LINK}"
 
-  sed -e "$(generate_sed_filter ${echo_code_keys})" "${CACHE_FILE}" \
+  sed -e "$(generate_sed_filter "$@")" "${CACHE_FILE}" \
     >"${tmpfile}"
   atomic_move "${tmpfile}" "${ECHO_COUPON_FILE}"
   set_conservative_perm "${ECHO_COUPON_FILE}"
@@ -160,23 +171,24 @@ generate_echo_codes() {
 
 # Generate the filtered file.
 generate_filtered_file() {
-  local whitelist="
-    ActivateDate
-    block_devmode
-    check_enrollment
-    customization_id
-    initial_locale
-    initial_timezone
-    keyboard_layout
-    model_name
-    panel_backlight_max_nits
-    Product_S\/N
-    region
-    rlz_brand_code
-    rlz_embargo_end_date
-    serial_number
-    should_send_rlz_ping
-    sku_number"
+  # Allow-list.
+  set -- \
+    ActivateDate \
+    block_devmode \
+    check_enrollment \
+    customization_id \
+    initial_locale \
+    initial_timezone \
+    keyboard_layout \
+    model_name \
+    panel_backlight_max_nits \
+    "Product_S\/N" \
+    region \
+    rlz_brand_code \
+    rlz_embargo_end_date \
+    serial_number \
+    should_send_rlz_ping \
+    sku_number
 
   if [ -f "${FILTERED_FILE}" ]; then
     return
@@ -185,13 +197,14 @@ generate_filtered_file() {
   # Files for temporary and final storage of filtered VPD data. Note that the
   # temporary file is under same folder with ${FILTERED_FILE} to ensure that
   # renaming (mv) is atomic.
-  local tmpfile="$(mktemp --tmpdir="$(dirname "${FILTERED_FILE}")" \
+  local tmpfile
+  tmpfile="$(mktemp --tmpdir="$(dirname "${FILTERED_FILE}")" \
                    filtered.txt.tmp.XXXXXXXXXX)"
   add_temp_files "${tmpfile}"
 
   # If the file exists, but was not regular.
   rm -f "${FILTERED_FILE}"
-  sed -e "$(generate_sed_filter ${whitelist})" "${CACHE_FILE}" >"${tmpfile}"
+  sed -e "$(generate_sed_filter "$@")" "${CACHE_FILE}" >"${tmpfile}"
   set_world_readable "${tmpfile}"
   atomic_move "${tmpfile}" "${FILTERED_FILE}"
 }
@@ -224,9 +237,10 @@ migrate() {
     else
       # To get an atomic move, the legacy file is first copied to a temporary
       # file on the destination file system which is then moved into place.
-      mkdir -p "$(dirname ${target})"
-      local target_tmp=$(mktemp --tmpdir="$(dirname ${target})" \
-          "$(basename ${target}).tmp.XXXXXXXXXX")
+      mkdir -p "$(dirname "${target}")"
+      local target_tmp
+      target_tmp=$(mktemp --tmpdir="$(dirname "${target}")" \
+          "$(basename "${target}").tmp.XXXXXXXXXX")
       mv -f "${legacy}" "${target_tmp}"
       atomic_move "${target_tmp}" "${target}"
     fi
@@ -234,7 +248,7 @@ migrate() {
     echo "# The type of legacy file ${legacy} cannot be migrated."
     exit 1
   fi
-  mkdir -p "$(dirname ${legacy})"
+  mkdir -p "$(dirname "${legacy}")"
   ln -sf "${target}" "${legacy}"
 }
 
@@ -319,8 +333,8 @@ main() {
   done
 
   # Remove output files if --clean or --force flagged.
-  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} -o \
-       "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ] || \
+      [ "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
     rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
           "${FILTERED_LINK}" "${CACHE_LINK}"
 
