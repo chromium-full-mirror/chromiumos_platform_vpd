@@ -521,6 +521,32 @@ end_of_func:
   return buf;
 }
 
+vpd_err_t loadRawFile(const char *filename, struct PairContainer *container) {
+  uint8_t *vpd_buf;
+  uint32_t index, file_size;
+  vpd_err_t retval = VPD_OK;
+
+  if (!(vpd_buf = readFileContent(filename, &file_size))) {
+    fprintf(stderr, "[ERROR] Cannot LoadRawFile('%s').\n", filename);
+    return VPD_ERR_SYSTEM;
+  }
+
+  for (index = 0;
+       index < file_size &&
+       vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+       vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+    retval = decodeToContainer(container, file_size, vpd_buf, &index);
+    if (VPD_OK != retval) {
+      fprintf(stderr, "decodeToContainer() error.\n");
+      goto teardown;
+    }
+  }
+  file_flag |= HAS_VPD_2_0;
+
+teardown:
+  free(vpd_buf);
+  return retval;
+}
 
 vpd_err_t loadFile(const char *filename, struct PairContainer *container,
              int overwrite_it) {
@@ -897,6 +923,7 @@ static void usage(const char *progname) {
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
   printf("      --sh             Dump content for shell script.\n");
+  printf("      --raw            Parse from a raw blob (without headers).\n");
   printf("      -0/--null-terminated\n");
   printf("                       Dump content in null terminate format.\n");
   printf("      -O               Overwrite and re-format VPD partition.\n");
@@ -927,6 +954,7 @@ int main(int argc, char *argv[]) {
     {"overwrite", 0, 0, 'O'},
     {"filter", 0, 0, 'g'},
     {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
+    {"raw", 0, 0, 'R'},
     {"null-terminated", 0, 0, '0'},
     {"delete", 0, 0, 'd'},
     {0, 0, 0, 0}
@@ -943,6 +971,7 @@ int main(int argc, char *argv[]) {
   int modified = 0;
   int num_to_delete;
   int read_from_file = 0;
+  int raw_input = 0;
 
   initContainer(&file);
   initContainer(&set_argument);
@@ -1028,6 +1057,10 @@ int main(int argc, char *argv[]) {
         export_type = VPD_EXPORT_NULL_TERMINATE;
         break;
 
+      case 'R':
+        raw_input = 1;
+        break;
+
       case 0:
         break;
 
@@ -1046,14 +1079,6 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  tmp_part_file = myMkTemp();
-  tmp_full_file = myMkTemp();
-  if (!tmp_part_file || !tmp_full_file) {
-    fprintf(stderr, "[ERROR] Failed creating temporary files.\n");
-    retval = VPD_ERR_SYSTEM;
-    goto teardown;
-  }
-
   if (list_it && key_to_export) {
     fprintf(stderr, "[ERROR] -l and -g must be mutually exclusive.\n");
     retval = VPD_ERR_SYNTAX;
@@ -1064,6 +1089,27 @@ int main(int argc, char *argv[]) {
     fprintf(stderr,
             "[ERROR] --sh/--null-terminated can be set only if -l is set.\n");
     retval = VPD_ERR_SYNTAX;
+    goto teardown;
+  }
+
+  if (raw_input && !filename) {
+    fprintf(stderr, "[ERROR] Needs -f FILE for raw input.\n");
+    retval = VPD_ERR_SYNTAX;
+    goto teardown;
+  }
+
+  if (raw_input && (lenOfContainer(&set_argument) ||
+                    lenOfContainer(&del_argument))) {
+    fprintf(stderr, "[ERROR] Changing in raw mode is not supported.\n");
+    retval = VPD_ERR_SYNTAX;
+    goto teardown;
+  }
+
+  tmp_part_file = myMkTemp();
+  tmp_full_file = myMkTemp();
+  if (!tmp_part_file || !tmp_full_file) {
+    fprintf(stderr, "[ERROR] Failed creating temporary files.\n");
+    retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
 
@@ -1093,7 +1139,10 @@ int main(int argc, char *argv[]) {
     save_file = filename;
   }
 
-  retval = loadFile(load_file, &file, overwrite_it);
+  if (raw_input)
+    retval = loadRawFile(load_file, &file);
+  else
+    retval = loadFile(load_file, &file, overwrite_it);
   if (VPD_OK != retval) {
     fprintf(stderr, "loadFile('%s') error.\n", load_file);
     goto teardown;
