@@ -5,8 +5,10 @@
 #
 # Helper utility to read a single value from VPD.
 #
-# The script is optimized for reading one entry from VPD, first RO then RW.
-# If the given key is not found, prints nothing.
+# The script is optimized for reading one entry from VPD, first RO then RW. If
+# the given key is not found, it prints nothing and exists with zero. But, it
+# may emit errors in stderr, so the its users should only rely only on stdout
+# and ignore stderr.
 
 # CACHE_FILE is defined from dump_vpd_log.
 CACHE_FILE=/mnt/stateful_partition/unencrypted/cache/vpd/full-v2.txt
