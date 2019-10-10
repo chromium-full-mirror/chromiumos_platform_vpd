@@ -49,11 +49,13 @@ while [[ "$#" -gt 0 ]]; do
     # Delete ${key} if it exists.
     if [[ "${vpd_contents[${quoted_key}]+set}" == "set" || \
           -n "${VPD_IGNORE_CACHE}" ]]; then
+      echo "Key ${key} to be removed from VPD"
       updates+=( -d "${key}" )
     fi
   else
     # Set ${key} to ${value} if the value doesn't match already.
     if [[ "\"${value}\"" != "${vpd_contents[${quoted_key}]}" ]]; then
+      echo "Update key ${key}=${value} in VPD"
       updates+=( -s "${key}=${value}" )
     fi
   fi
