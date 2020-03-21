@@ -124,7 +124,8 @@ generate_cache_file() {
   fi
 
   generate_full_text "${bios_tmp}" "RO_VPD" "${cache_tmp}"
-  echo '"___ro_rw_delimiter___"="___RW_VPD_below___"' >>"${cache_tmp}"
+  echo "\"${RO_RW_DELIMITER_KEY}\""="\"${RO_RW_DELIMITER_VALUE}\"" \
+    >>"${cache_tmp}"
   generate_full_text "${bios_tmp}" "RW_VPD" "${cache_tmp}"
   atomic_move "${cache_tmp}" "${CACHE_FILE}"
 
@@ -171,7 +172,31 @@ generate_echo_codes() {
 
 # Generate the filtered file.
 generate_filtered_file() {
-  # Allow-list.
+  if [ -f "${FILTERED_FILE}" ]; then
+    return
+  fi
+
+  # Files for temporary and final storage of filtered VPD data. Note that the
+  # temporary file is under same folder with ${FILTERED_FILE} to ensure that
+  # renaming (mv) is atomic.
+  local tmpfile
+  tmpfile="$(mktemp --tmpdir="$(dirname "${FILTERED_FILE}")" \
+                   filtered.txt.tmp.XXXXXXXXXX)"
+  add_temp_files "${tmpfile}"
+
+  # If the file exists, but was not regular.
+  rm -f "${FILTERED_FILE}"
+  generate_filtered_file_contents_from_vpd "$tmpfile"
+  generate_filtered_file_contents_from_ro_vpd "$tmpfile"
+  set_world_readable "${tmpfile}"
+  atomic_move "${tmpfile}" "${FILTERED_FILE}"
+}
+
+# Generate filtered file contents from VPD (either RO or RW).
+generate_filtered_file_contents_from_vpd() {
+  local tmpfile="$1"
+
+  # List of VPD keys.
   set -- \
     ActivateDate \
     block_devmode \
@@ -190,23 +215,19 @@ generate_filtered_file() {
     should_send_rlz_ping \
     sku_number
 
-  if [ -f "${FILTERED_FILE}" ]; then
-    return
-  fi
+  sed -e "$(generate_sed_filter "$@")" "${CACHE_FILE}" >>"${tmpfile}"
+}
 
-  # Files for temporary and final storage of filtered VPD data. Note that the
-  # temporary file is under same folder with ${FILTERED_FILE} to ensure that
-  # renaming (mv) is atomic.
-  local tmpfile
-  tmpfile="$(mktemp --tmpdir="$(dirname "${FILTERED_FILE}")" \
-                   filtered.txt.tmp.XXXXXXXXXX)"
-  add_temp_files "${tmpfile}"
+# Generate filtered file contents from RO VPD.
+generate_filtered_file_contents_from_ro_vpd() {
+  local tmpfile="$1"
 
-  # If the file exists, but was not regular.
-  rm -f "${FILTERED_FILE}"
-  sed -e "$(generate_sed_filter "$@")" "${CACHE_FILE}" >"${tmpfile}"
-  set_world_readable "${tmpfile}"
-  atomic_move "${tmpfile}" "${FILTERED_FILE}"
+  # List of VPD keys.
+  set -- \
+    attested_device_id
+
+  sed -e "/^\"${RO_RW_DELIMITER_KEY}\"=\"${RO_RW_DELIMITER_VALUE}\"\$/,\$d" \
+    -e "$(generate_sed_filter "$@")" "${CACHE_FILE}" >>"${tmpfile}"
 }
 
 # Invoke the VPD utility for generating full VPD content.
@@ -301,6 +322,10 @@ main() {
     fi
   fi
   set_world_enterable "${CACHE_DIR}"
+
+  # A fake VPD key/value delimiting RO from RW VPD in the dump.
+  RO_RW_DELIMITER_KEY='___ro_rw_delimiter___'
+  RO_RW_DELIMITER_VALUE='___RW_VPD_below___'
 
   # Files for final cache of full VPD data.
   CACHE_FILE="${CACHE_DIR}/full-v2.txt"
