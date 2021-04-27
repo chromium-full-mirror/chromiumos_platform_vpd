@@ -3,6 +3,3 @@ include chromiumos/platform/factory:/OWNERS
 
 # hungte for underlying data structure and layout.
 hungte@chromium.org
-
-# tnagel represents privacy team.
-tnagel@chromium.org
