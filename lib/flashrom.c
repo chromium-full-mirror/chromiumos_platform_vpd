@@ -78,7 +78,7 @@ int flashromPartialWrite(const char* part_file, const char* full_file,
 
   /* write it back */
   snprintf(cmd, sizeof(cmd),
-           "%s %s -i '%s':'%s' -w '%s' --fast-verify >/dev/null 2>&1",
+           "%s %s -i '%s':'%s' -w '%s' --noverify-all >/dev/null 2>&1",
            flashrom_cmd, flashrom_arguments,
            partition_name, part_file, full_file);
   ret = system(cmd);
