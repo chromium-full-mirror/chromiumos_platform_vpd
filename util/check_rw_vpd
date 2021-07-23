@@ -94,24 +94,14 @@ DEPRECATED_VPD_KEYS="
   mlb_serial_number
   recovery_count"
 
-SUCCESS=0
-CONTENT_MISMATCH=256
-EMPTY_VPD=257
-EMPTY_DUMP_VPD=258
-EMPTY_RW_VPD=259
-
-send_uma_result() {
-  metrics_client -s Enterprise.VpdCheck "$1" &
-}
-
 main() {
   renice -n 19 $$
 
   # Read from RW_VPD.
-  vpd_rw_output="$(vpd -i RW_VPD -l)"
+  vpd_rw_output="$(dump_vpd_log --stdout --full |\
+                   sed -n '/__ro_rw_delimiter___/,$p' | sed '1d')"
   read_status=$?
   if [ "${read_status}" != 0 ]; then
-    send_uma_result "${read_status}"
     exit "${read_status}"
   fi
 
@@ -137,20 +127,6 @@ main() {
 ${vpd_rw_output}
 EOF
   metrics_client -e Platform.Vpd.UnknownKeys "${unknown_count}" 10
-
-  # Compare RW_VPD contents against dump_vpd_log output.
-  dump_vpd_output="$(dump_vpd_log --stdout --full)"
-  if [ -z "${dump_vpd_output}" ] && [ -z "${vpd_rw_output}" ]; then
-    send_uma_result "${EMPTY_VPD}"
-  elif [ -z "${dump_vpd_output}" ]; then
-    send_uma_result "${EMPTY_DUMP_VPD}"
-  elif [ -z "${vpd_rw_output}" ]; then
-    send_uma_result "${EMPTY_RW_VPD}"
-  elif [ -z "${dump_vpd_output##*$vpd_rw_output}" ]; then
-    send_uma_result "${SUCCESS}"
-  else
-    send_uma_result "${CONTENT_MISMATCH}"
-  fi
 }
 
 main "$@"
