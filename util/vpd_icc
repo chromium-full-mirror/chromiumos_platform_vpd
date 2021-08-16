@@ -6,7 +6,7 @@
 # Packs ICC profiles to VPD, or to create local ICC profile files from VPD.
 
 VPD_KEY="display_profiles"
-CACHE_DIR="/var/cache/display_profiles/vpd"
+CACHE_DIR="/var/cache/display_profiles"
 ICC_EXT=".icc"
 
 error() {
