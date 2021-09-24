@@ -89,6 +89,17 @@ test_image() {
   RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -d NONE"
 
   #
+  # Test adding strings with double quote (")
+  # Serial number is a special case.
+  RUN $VPD_ERR_PARAM "$BINARY -f $BIOS -s serial_number=quote\\\"quote"
+  # For other keys, double quote can be used.
+  RUN $VPD_OK "$BINARY -f $BIOS -s XYZ=quote\\\"quote"
+  # Make sure the value is as expected
+  RUN $GREP_OK "$BINARY -f $BIOS -l | grep XYZ | grep quote\\\"quote"
+  # Clean up.
+  RUN $VPD_OK "$BINARY -f $BIOS -d XYZ"
+
+  #
   # Delete single.
   # expect SUCCESS and nothing left.
   RUN $VPD_OK "$BINARY -f $BIOS -d ABC"

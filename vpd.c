@@ -304,6 +304,59 @@ static vpd_err_t checkKeyName(const uint8_t *name) {
 
 
 /*
+ * Check if key and value are compliant to recommended format.
+ * For the checker of the key, see the function |checkKeyName|.
+ * If key is "serial_number" or "mlb_serial_number", the value should only
+ * contain characters a-z, A-Z, 0-9 or dash (-).
+ */
+static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
+  vpd_err_t retval = VPD_OK;
+  int is_serial_number = 0;
+  size_t value_len = 0;
+  unsigned char c;
+
+  retval = checkKeyName(key);
+  if (retval != VPD_OK)
+    return retval;
+
+  if (strncmp("serial_number",
+              (const char*)key,
+              sizeof("serial_number")) == 0 ||
+      strncmp("mlb_serial_number",
+              (const char*)key,
+              sizeof("mlb_serial_number")) == 0)
+    is_serial_number = 1;
+
+  if (is_serial_number) {
+    // For serial numbers, we only allow a-z, A-Z, 0-9 and dash (-).
+    for (value_len = 0; (c = value[value_len]); value_len++) {
+      if (!(isalnum(c) || c == '-')) {
+        fprintf(stderr, "[ERROR] serial number does not allow char [%c].\n", c);
+        return VPD_ERR_PARAM;
+      }
+    }
+
+    if (value_len == 0) {
+      fprintf(stderr, "[ERROR] serial number cannot be empty.\n");
+      return VPD_ERR_PARAM;
+    }
+
+    if (value[0] == '-') {
+      fprintf(stderr, "[ERROR] serial number cannot start with [-].\n");
+      return VPD_ERR_PARAM;
+    }
+
+    if (value[value_len - 1] == '-') {
+      fprintf(stderr, "[ERROR] serial number cannot end with [-].\n");
+      return VPD_ERR_PARAM;
+    }
+  }
+
+  return VPD_OK;
+}
+
+
+/*
  * Given a key=value string, this function parses it and adds to arugument
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
@@ -340,7 +393,7 @@ vpd_err_t parseString(const uint8_t *string, int read_from_file) {
     }
   }
 
-  retval = checkKeyName(key);
+  retval = checkKeyValuePair(key, value);
   if (retval == VPD_OK)
     setString(&set_argument, key, value, pad_value_len);
 
