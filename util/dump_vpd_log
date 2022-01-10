@@ -91,6 +91,26 @@ flash_whole() {
   flashrom -p host -r "$@"
 }
 
+# Check if the cache file is valid and remove it if not.
+validate_cache_file() {
+  # Cache does not exist, nothing to validate.
+  if [ ! -f "${CACHE_FILE}" ]; then
+    return
+  fi
+
+  # File should never be empty.
+  if [ ! -s "${CACHE_FILE}" ]; then
+    rm -f "${CACHE_FILE}"
+  fi
+
+  # Validate file format.
+  # This also detects error lines.
+  if grep -v -q '^".*"=".*"$' "${CACHE_FILE}"; then
+    rm -f "${CACHE_FILE}"
+    return
+  fi
+}
+
 generate_cache_file() {
   if [ -f "${CACHE_FILE}" ]; then
     return
@@ -379,6 +399,9 @@ main() {
     echo "You specified --full without --stdout, aborting."
     exit 1
   fi
+
+  # Validate cache.
+  validate_cache_file
 
   # Generate missing files.
   generate_cache_file
