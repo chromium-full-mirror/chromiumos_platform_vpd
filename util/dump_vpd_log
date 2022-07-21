@@ -111,15 +111,44 @@ validate_cache_file() {
   fi
 }
 
+# Generates a temporary file used for caching the results of flashrom across
+# subsequent invocations of the vpd utility within this script.
+# The filename is filled into ${BIOS_TMP_FILE}. Nobody else but this function
+# should modify the variable.
+generate_bios_tmp_file() {
+  # Bios temp file has already been created and ${BIOS_TMP_FILE} has it's name.
+  # Do nothing.
+  if [ -n "${BIOS_TMP_FILE}" ]; then
+    return
+  fi
+
+  BIOS_TMP_FILE="$(mktemp)"
+  add_temp_files "${BIOS_TMP_FILE}"
+
+ if [ -n "${debug_log}" ]; then
+    echo "-------------------" "$(date)" >>"${debug_log}"
+    if ! flash_partial "${BIOS_TMP_FILE}" -V -V -V >>"${debug_log}" 2>&1; then
+      if ! flash_whole "${BIOS_TMP_FILE}" -V -V -V >>"${debug_log}" 2>&1; then
+        exit 1
+      fi
+    fi
+  else
+    # flashrom may print messages on stdout (for example, "Reading flash...
+    # SUCCESS") so we do want to prevent that for --stdout.
+    if ! flash_partial "${BIOS_TMP_FILE}" 1>&2; then
+      if ! flash_whole "${BIOS_TMP_FILE}" 1>&2; then
+        exit 1
+      fi
+    fi
+  fi
+}
+
 generate_cache_file() {
   if [ -f "${CACHE_FILE}" ]; then
     return
   fi
-  # A temporary file used for caching the results of flashrom across subsequent
-  # invocations of the vpd utility within this script.
-  local bios_tmp
-  bios_tmp="$(mktemp)"
-  add_temp_files "${bios_tmp}"
+
+  generate_bios_tmp_file
 
   # The temporary file is under same folder as ${CACHE_FILE} to ensure that
   # renaming (mv) is atomic.
@@ -130,27 +159,17 @@ generate_cache_file() {
 
   # If the file exists, but was not regular.
   rm -f "${CACHE_FILE}"
-  if [ -n "${debug_log}" ]; then
-    echo "-------------------" "$(date)" >>"${debug_log}"
-    flash_partial "${bios_tmp}" -V -V -V >>"${debug_log}" 2>&1 ||
-      flash_whole "${bios_tmp}" -V -V -V >>"${debug_log}" 2>&1 ||
-      exit 1
-  else
-    # flashrom may print messages on stdout (for example, "Reading flash...
-    # SUCCESS") so we do want to prevent that for --stdout.
-    flash_partial "${bios_tmp}" 1>&2 ||
-      flash_whole "${bios_tmp}" 1>&2 ||
-      exit 1
-  fi
 
-  generate_full_text "${bios_tmp}" "RO_VPD" "${cache_tmp}"
-  echo "\"${RO_RW_DELIMITER_KEY}\""="\"${RO_RW_DELIMITER_VALUE}\"" \
+  generate_full_text "${BIOS_TMP_FILE}" "RO_VPD" "${cache_tmp}"
+  echo "\"${RO_RW_DELIMITER_KEY}\"=\"${RO_RW_DELIMITER_VALUE}\"" \
     >>"${cache_tmp}"
-  generate_full_text "${bios_tmp}" "RW_VPD" "${cache_tmp}"
+  generate_full_text "${BIOS_TMP_FILE}" "RW_VPD" "${cache_tmp}"
   atomic_move "${cache_tmp}" "${CACHE_FILE}"
 
-  # Remove existing filtered output file, forcing it to be regenerated.
+  # Remove existing filtered and status output files, forcing them to be
+  # regenerated.
   rm -f "${FILTERED_FILE}"
+  rm -f "${STATUS_FILE}"
 }
 
 # Generate the coupon code file containing cached VPD ECHO attributes.
@@ -206,8 +225,8 @@ generate_filtered_file() {
 
   # If the file exists, but was not regular.
   rm -f "${FILTERED_FILE}"
-  generate_filtered_file_contents_from_vpd "$tmpfile"
-  generate_filtered_file_contents_from_ro_vpd "$tmpfile"
+  generate_filtered_file_contents_from_vpd "${tmpfile}"
+  generate_filtered_file_contents_from_ro_vpd "${tmpfile}"
   set_world_readable "${tmpfile}"
   atomic_move "${tmpfile}" "${FILTERED_FILE}"
 }
@@ -258,6 +277,50 @@ generate_filtered_file_contents_from_ro_vpd() {
 # $3: file name to append output
 generate_full_text() {
   (vpd -f "$1" -i "$2" -l || echo "# $2 execute error.") >>"$3"
+}
+
+# Generate status file contents from VPD utility.
+generate_status_file() {
+  if [ -f "${STATUS_FILE}" ]; then
+    return
+  fi
+
+  generate_bios_tmp_file
+
+  # The temporary file is under same folder as ${STATUS_FILE} to ensure that
+  # renaming (mv) is atomic.
+  local status_tmp
+  status_tmp="$(mktemp --tmpdir="$(dirname "${STATUS_FILE}")" \
+                     status.txt.tmp.XXXXXXXXXX)"
+  add_temp_files "${status_tmp}"
+
+  # If the file exists, but was not regular.
+  rm -f "${STATUS_FILE}"
+
+  generate_status_file_from_vpd "${BIOS_TMP_FILE}" "RO_VPD" "${status_tmp}"
+  generate_status_file_from_vpd "${BIOS_TMP_FILE}" "RW_VPD" "${status_tmp}"
+  set_world_readable "${status_tmp}"
+  atomic_move "${status_tmp}" "${STATUS_FILE}"
+}
+
+# Invoke the VPD utility to generate file with its status.
+#
+# $1: BIOS filename
+# $2: partition name
+# $3: file name to append output
+generate_status_file_from_vpd() {
+  local bios_filename="$1"
+  local vpd_partition="$2"
+  local output_filename="$3"
+
+  local vpd_status
+  vpd_status=$(
+    set +e
+    vpd -f "${bios_filename}" -i "${vpd_partition}" >&2
+    echo "$?"
+  )
+
+  echo "\"${vpd_partition}_status\"=\"${vpd_status}\"" >> "${output_filename}"
 }
 
 # Migrate the legacy file under encrypted partition to be a symlink pointing to
@@ -366,6 +429,9 @@ main() {
   FILTERED_FILE="${CACHE_DIR}/filtered.txt"
   FILTERED_LINK="/var/log/vpd_2.0.txt"
 
+  # Location for stroring VPD status.
+  STATUS_FILE="${CACHE_DIR}/status.txt"
+
   if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
     debug_log="/tmp/dump_vpd_log.debug"
   fi
@@ -382,7 +448,7 @@ main() {
   if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ] || \
       [ "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
     rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
-          "${FILTERED_LINK}" "${CACHE_LINK}"
+          "${FILTERED_LINK}" "${CACHE_LINK}" "${STATUS_FILE}"
 
     # If --clean was flagged, we're done.
     if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ]; then
@@ -407,6 +473,7 @@ main() {
   # Generate missing files.
   generate_cache_file
   generate_filtered_file
+  generate_status_file
 
   # Print to stdout if needed.
   if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
