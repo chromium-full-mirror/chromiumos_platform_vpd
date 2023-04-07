@@ -12,17 +12,18 @@
 #
 
 # Load shflags, define script flags.
+# shellcheck source=../../../scripts/lib/shflags/shflags
 . /usr/share/misc/shflags
 
-DEFINE_boolean "clean" ${FLAGS_FALSE} \
+DEFINE_boolean "clean" "${FLAGS_FALSE}" \
   "Clean VPD cache and output files, then quit."
-DEFINE_boolean "force" ${FLAGS_FALSE} \
+DEFINE_boolean "force" "${FLAGS_FALSE}" \
   "Force regeneration of VPD cache and output files."
-DEFINE_boolean "full" ${FLAGS_FALSE} \
+DEFINE_boolean "full" "${FLAGS_FALSE}" \
   "Generate full output, without filtering."
-DEFINE_boolean "stdout" ${FLAGS_FALSE} \
+DEFINE_boolean "stdout" "${FLAGS_FALSE}" \
   "Dump VPD to standard output, instead of a file."
-DEFINE_boolean "debug" ${FLAGS_FALSE} \
+DEFINE_boolean "debug" "${FLAGS_FALSE}" \
   "Debug mode."
 
 # Parse arguments.
@@ -125,7 +126,7 @@ generate_bios_tmp_file() {
   BIOS_TMP_FILE="$(mktemp)"
   add_temp_files "${BIOS_TMP_FILE}"
 
- if [ -n "${debug_log}" ]; then
+  if [ -n "${debug_log}" ]; then
     echo "-------------------" "$(date)" >>"${debug_log}"
     if ! flash_partial "${BIOS_TMP_FILE}" -V -V -V >>"${debug_log}" 2>&1; then
       if ! flash_whole "${BIOS_TMP_FILE}" -V -V -V >>"${debug_log}" 2>&1; then
@@ -365,7 +366,7 @@ add_temp_files() {
 # Removes all temporary files.
 cleanup() {
   if [ -n "${TEMP_FILES}" ]; then
-    # TEMP_FILES is a list so we don't quote it.
+    # shellcheck disable=SC2086 # TEMP_FILES is a list so we don't quote it.
     rm -rf ${TEMP_FILES}
     TEMP_FILES=""
   fi
@@ -432,7 +433,7 @@ main() {
   # Location for stroring VPD status.
   STATUS_FILE="${CACHE_DIR}/status.txt"
 
-  if [ "${FLAGS_debug}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_debug}" -eq "${FLAGS_TRUE}" ]; then
     debug_log="/tmp/dump_vpd_log.debug"
   fi
 
@@ -445,19 +446,19 @@ main() {
   done
 
   # Remove output files if --clean or --force flagged.
-  if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ] || \
-      [ "${FLAGS_force}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_clean}" -eq "${FLAGS_TRUE}" ] || \
+      [ "${FLAGS_force}" -eq "${FLAGS_TRUE}" ]; then
     rm -f "${FILTERED_FILE}" "${CACHE_FILE}" "${ECHO_COUPON_FILE}" \
           "${FILTERED_LINK}" "${CACHE_LINK}" "${STATUS_FILE}"
 
     # If --clean was flagged, we're done.
-    if [ "${FLAGS_clean}" -eq ${FLAGS_TRUE} ]; then
+    if [ "${FLAGS_clean}" -eq "${FLAGS_TRUE}" ]; then
       exit 0
     fi
   fi
 
-  if [ "${FLAGS_stdout}" -eq ${FLAGS_FALSE} ] &&
-     [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_stdout}" -eq "${FLAGS_FALSE}" ] &&
+     [ "${FLAGS_full}" -eq "${FLAGS_TRUE}" ]; then
     # --full must only be used with --stdout, to prevent accidental dumping of
     # sensitive VPD info into a world-readable file. To be used as follows:
     #
@@ -476,8 +477,8 @@ main() {
   generate_status_file
 
   # Print to stdout if needed.
-  if [ "${FLAGS_stdout}" -eq ${FLAGS_TRUE} ]; then
-    if [ "${FLAGS_full}" -eq ${FLAGS_TRUE} ]; then
+  if [ "${FLAGS_stdout}" -eq "${FLAGS_TRUE}" ]; then
+    if [ "${FLAGS_full}" -eq "${FLAGS_TRUE}" ]; then
       cat "${CACHE_FILE}"
     else
       cat "${FILTERED_FILE}"
