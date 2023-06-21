@@ -27,7 +27,7 @@
 #include <ctype.h>
 #include <uuid/uuid.h>
 
-#include "lib/math.h"
+#include "lib/checksum.h"
 #include "lib/lib_smbios.h"
 #include "lib/vpd.h"
 #include "lib/vpd_tables.h"

@@ -48,7 +48,7 @@ LIB_OBJS= \
 	lib/vpd_container.o \
 	lib/vpd_decode.o \
 	lib/vpd_encode.o \
-	lib/math.o
+	lib/checksum.o
 
 TEST_OBJS= \
 	lib/lib_vpd_test.o
