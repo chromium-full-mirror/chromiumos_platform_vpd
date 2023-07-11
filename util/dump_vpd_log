@@ -242,6 +242,7 @@ generate_filtered_file_contents_from_vpd() {
     block_devmode \
     check_enrollment \
     customization_id \
+    display_profiles \
     initial_locale \
     initial_timezone \
     keyboard_layout \
