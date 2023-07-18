@@ -37,9 +37,8 @@ VERSION := $(shell ./util/getversion.sh)
 CFLAGS+=-g -Iinclude/ -Iinclude/lib -Werror -Wall -D'VPD_VERSION="$(VERSION)"'
 LDFLAGS+=-luuid
 BINARY=vpd
-STATIC_BINARY=vpd_s
 TEST_BINARY=vpd_test
-BINS=$(BINARY) $(TEST_BINARY) $(STATIC_BINARY)
+BINS=$(BINARY) $(TEST_BINARY)
 
 LIB_OBJS= \
 	lib/flashrom.o \
@@ -60,9 +59,6 @@ all: $(BINS)
 
 $(BINARY): $(OBJS)
 	$(CC) -o $@ $? $(LDFLAGS)
-
-$(STATIC_BINARY): $(OBJS)
-	$(CC) -static -o $@ $? $(LDFLAGS)
 
 $(TEST_BINARY): $(TEST_OBJS) $(LIB_OBJS)
 	# library level test
