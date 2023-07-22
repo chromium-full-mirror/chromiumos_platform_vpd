@@ -10,6 +10,7 @@
 #include <string.h>
 #include "lib/lib_vpd.h"
 
+#ifndef NDEBUG
 enum {
   TEST_OK = 0,
   TEST_FAIL = 1,
@@ -360,10 +361,11 @@ int testDeleteSecondOfThree() {
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
 }
-
+#endif
 
 
 int main() {
+#ifndef NDEBUG
   assert(TEST_OK == testEncodeLen());
   assert(TEST_OK == testDecodeLen());
   assert(TEST_OK == testEncodeVpdString());
@@ -378,5 +380,6 @@ int main() {
   assert(TEST_OK == testDeleteSecondOfThree());
 
   printf("SUCCESS!\n");
+#endif
   return 0;
 }
