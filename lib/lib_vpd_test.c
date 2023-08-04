@@ -205,6 +205,8 @@ int testContainer() {
   assert(sizeof(expected) == generated);
   assert(!memcmp(expected, buf, generated));
 
+  destroyContainer(&container);
+
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
 }
@@ -234,6 +236,8 @@ int testDecodeVpdString() {
   assert(sizeof(expected) == encode_consumed);
   assert(!memcmp(expected, buf, encode_consumed));
 
+  destroyContainer(&container);
+
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
 }
@@ -248,6 +252,8 @@ int testDeleteEmptyContainer() {
   /* still good for add */
   setString(&container, CU8"FIRST", CU8"1", 8);
   assert(NULL != findString(&container, CU8"FIRST", NULL));
+
+  destroyContainer(&container);
 
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
@@ -268,6 +274,8 @@ int testDeleteFirstOfOne() {
   /* still good for add */
   setString(&container, CU8"SECOND", CU8"2", 12);
   assert(NULL != findString(&container, CU8"SECOND", NULL));
+
+  destroyContainer(&container);
 
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
@@ -291,6 +299,8 @@ int testDeleteFirstOfTwo() {
   setString(&container, CU8"FIRST", CU8"1", 9);
   assert(NULL != findString(&container, CU8"FIRST", NULL));
 
+  destroyContainer(&container);
+
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
 }
@@ -312,6 +322,8 @@ int testDeleteSecondOfTwo() {
   /* still good for add */
   setString(&container, CU8"SECOND", CU8"2", 5);
   assert(NULL != findString(&container, CU8"SECOND", NULL));
+
+  destroyContainer(&container);
 
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
@@ -357,6 +369,8 @@ int testDeleteSecondOfThree() {
   assert(NULL != findString(&container, CU8"FORTH", NULL));
   setString(&container, CU8"FIFTH", CU8"5", 5);
   assert(NULL != findString(&container, CU8"FIFTH", NULL));
+
+  destroyContainer(&container);
 
   printf("[PASS] %s()\n", __FUNCTION__);
   return TEST_OK;
