@@ -8,7 +8,7 @@ set -e
 
 . ./functions.sh
 
-BINARY="../vpd"
+BINARY="${OUT}/vpd"
 TMP_DIR="$(mktemp -d)"
 BIOS_PACKS="gVpdInfo.tbz"
 BIOS="${TMP_DIR}/broken.vpd"

@@ -78,7 +78,7 @@ EXPECT_EQ() {
 RUN() {
   local rc
   local output
-  output=$(eval "$2" 2>/dev/null) && rc=$? || rc=$?
+  output=$(eval "$2") && rc=$? || rc=$?
 
   EXPECT_EQ "$rc" "$1" "$2"
   if [ $# -gt 2 ]; then

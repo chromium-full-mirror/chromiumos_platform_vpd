@@ -37,7 +37,7 @@ set -e
 
 . ./functions.sh
 
-BINARY="../vpd"
+BINARY="${OUT}/vpd"
 TMP_DIR=$(mktemp -d)
 BIOS_PACKS="vpd_0x600.tbz gVpdInfo.tbz"
 BIOS="${TMP_DIR}/empty.vpd"
