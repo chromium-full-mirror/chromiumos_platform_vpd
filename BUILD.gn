@@ -18,10 +18,7 @@ group("all") {
     deps += [ ":install_init" ]
   }
   if (use.test) {
-    deps += [
-      ":vpd_c_test",
-      ":vpd_test",
-    ]
+    deps += [ ":vpd_test" ]
   }
   if (use.fuzzer) {
     deps += [
@@ -33,18 +30,8 @@ group("all") {
   }
 }
 
-vpd_c_sources = [
-  "lib/checksum.c",
-  "lib/flashrom.c",
-  "lib/lib_smbios.c",
-  "lib/lib_vpd.c",
-  "lib/vpd_container.c",
-  "lib/vpd_decode.c",
-  "lib/vpd_encode.c",
-]
-
 executable("vpd") {
-  sources = [ "vpd.cc" ] + vpd_c_sources
+  sources = [ "vpd.cc" ]
   configs += [
     ":target_defaults",
     ":vpd_c",
@@ -126,20 +113,6 @@ shared_library("libvpd") {
 if (use.test) {
   pkg_config("test_config") {
     pkg_deps = [ "libchrome-test" ]
-  }
-
-  executable("vpd_c_test") {
-    sources = [ "lib/lib_vpd_test.c" ] + vpd_c_sources
-    configs += [
-      ":target_defaults",
-      ":vpd_c",
-    ]
-    include_dirs = [
-      "include",
-      "include/lib",
-    ]
-    run_test = true
-    deps = [ "//common-mk/testrunner" ]
   }
 
   executable("vpd_test") {
