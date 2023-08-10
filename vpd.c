@@ -76,13 +76,9 @@ int max_buf_len = sizeof(buf);
  * If the VPD partition can be found in fmap, this points to the starting
  * offset of VPD partition. If not found, this is used to be the base address
  * to increase SPD and VPD 2.0 offset fields.
- *
- * User can overwrite this by -E argument.
  */
 #define UNKNOWN_EPS_BASE ((uint32_t)-1)
 uint32_t eps_base = UNKNOWN_EPS_BASE;
-int eps_base_force_specified = 0;  /* a bool value to indicate if -E argument
-                                    * is given. */
 
 /* the fmap name of VPD. */
 char fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
@@ -603,26 +599,22 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   }
 
   if (0 == findVpdPartition(read_buf, file_size, &vpd_offset, &vpd_size)) {
-    if (!eps_base_force_specified) {
-      eps_base = vpd_offset;
-    }
+    eps_base = vpd_offset;
   } else {
     /* We cannot parse out the VPD partition address from given file.
      * Then, try to read the whole BIOS chip. */
     uint32_t offset, size;
-    if (!eps_base_force_specified) {
-      retval = getVpdPartitionFromFullBios(&offset, &size);
-      if (VPD_OK == retval) {
-        eps_base = offset;
-        vpd_size = size;
+    retval = getVpdPartitionFromFullBios(&offset, &size);
+    if (VPD_OK == retval) {
+      eps_base = offset;
+      vpd_size = size;
+    } else {
+      if (overwrite_it) {
+        retval = VPD_OK;
       } else {
-        if (overwrite_it) {
-          retval = VPD_OK;
-        } else {
-          fprintf(stderr, "[ERROR] getVpdPartitionFromFullBios() failed.");
-        }
-        goto teardown;
+        fprintf(stderr, "[ERROR] getVpdPartitionFromFullBios() failed.");
       }
+      goto teardown;
     }
   }
 
@@ -638,7 +630,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
 
   if (eps_base == UNKNOWN_EPS_BASE) {
     fprintf(stderr, "[ERROR] Cannot determine eps_base. Cannot go on.\n"
-                    "        You may use -E to specify the value.\n");
+                    "        Ensure you have a valid FMAP.\n");
     retval = VPD_ERR_INVALID;
     goto teardown;
   }
@@ -679,11 +671,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   }
 
   /* adjust the eps_base for data->offset field below. */
-  if (!eps_base_force_specified) {
-    related_eps_base = eps->table_address - sizeof(*eps);
-  } else {
-    related_eps_base = eps_base;
-  }
+  related_eps_base = eps->table_address - sizeof(*eps);
 
   /* EPS is done above. Parse structure tables below. */
   /* Get the first type 241 blob, at the tail of EPS. */
@@ -969,11 +957,10 @@ int main(int argc, char *argv[]) {
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
-  const char *optstring = "hf:E:s:S:p:i:lOg:d:0";
+  const char *optstring = "hf:s:S:p:i:lOg:d:0";
   static struct option long_options[] = {
     {"help", 0, 0, 'h'},
     {"file", 0, 0, 'f'},
-    {"epsbase", 0, 0, 'E'},
     {"string", 0, 0, 's'},
     {"base64file", 0, 0, 'S'},
     {"pad", required_argument, 0, 'p'},
@@ -1015,20 +1002,6 @@ int main(int argc, char *argv[]) {
 
       case 'f':
         filename = strdup(optarg);
-        break;
-
-      case 'E':
-        errno = 0;
-        eps_base = strtoul(optarg, (char **) NULL, 0);
-        eps_base_force_specified = 1;
-
-        /* FIXME: this is not a stable way to detect error because
-         *        implementation may (or may not) assign errno. */
-        if (!eps_base && errno == EINVAL) {
-          fprintf(stderr, "Not a number for EPS base address: %s\n", optarg);
-          retval = VPD_ERR_SYNTAX;
-          goto teardown;
-        }
         break;
 
       case 'S':
