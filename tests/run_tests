@@ -17,11 +17,15 @@ cd "${SCRIPT_LOCATION}"
 
 export LD_LIBRARY_PATH="${OUT}/lib:${LD_LIBRARY_PATH}"
 
+set -x
+
 ./test_basic.sh
 ./test_seg_fault.sh
 ./test_equal.sh
 ./test_multi_add_del.sh
 ./test_export.sh
 ./test_overflow.sh
+
+set +x
 
 echo "SUCCESS!"
