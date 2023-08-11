@@ -68,15 +68,18 @@ test_image() {
   args="${args} -p 2 -s 'c=ccc'"
   args="${args} -p 9 -s 'd=ddd'"
   args="${args} -p 0 -s 'e=eee'"
+  args="${args} -p 20 -s 'f=double\"quote'"
+  args="${args} -s $'g=\\'\\'\\'\\''"
   args="${args} -l --sh"
   RUN "${VPD_OK}" "${BINARY} ${args} > ${TMP_DIR}/import.sh"
   RUN 0 "sh ${TMP_DIR}/import.sh"
-  RUN "${VPD_OK}"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g a" "aaa"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g b" $'b\'b\nb'
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g c" "cc"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g d" "ddd"
   RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g e" ""
+  RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g f" "double\"quote"
+  RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -g g" "''''"
 
   #
   # export to null-terminated format
