@@ -37,9 +37,10 @@ set -e
 
 . ./functions.sh
 
+# shellcheck disable=SC2154 # exported by caller
 BINARY="${OUT}/vpd"
 TMP_DIR=$(mktemp -d)
-BIOS_PACKS="vpd_0x600.tbz gVpdInfo.tbz"
+BIOS_PACKS=( vpd_0x600.tbz gVpdInfo.tbz )
 BIOS="${TMP_DIR}/empty.vpd"
 
 test_image() {
@@ -88,13 +89,13 @@ test_image() {
 }
 
 main() {
-  for pack in $BIOS_PACKS
+  for pack in "${BIOS_PACKS[@]}"
   do
-    test_image "$pack"
+    test_image "${pack}"
   done
 }
 
 main
-clean_up
+clean_up "${TMP_DIR}"
 
 exit 0

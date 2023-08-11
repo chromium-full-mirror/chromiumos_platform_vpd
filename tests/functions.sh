@@ -33,6 +33,9 @@
 # Alternatively, this software may be distributed under the terms of the
 # GNU General Public License ("GPL") version 2 as published by the Free
 # Software Foundation.
+#
+# shellcheck disable=SC2034 # This is a library that exports a bunch of
+#                           # seemingly-unused stuff.
 set -e
 
 # Error/exit codes defined in lib_vpd.h.
@@ -52,7 +55,7 @@ GREP_OK=0
 GREP_FAIL=1
 
 clean_up() {
-  rm -rf "$TMP_DIR"
+  rm -rf "$1"
 }
 
 # $1: the tbz file
@@ -80,9 +83,9 @@ RUN() {
   local output
   output=$(eval "$2") && rc=$? || rc=$?
 
-  EXPECT_EQ "$rc" "$1" "$2"
+  EXPECT_EQ "${rc}" "$1" "$2"
   if [ $# -gt 2 ]; then
-    EXPECT_EQ "$output" "$3" "$2"
+    EXPECT_EQ "${output}" "$3" "$2"
   fi
 }
 
@@ -90,9 +93,9 @@ RUN() {
 # Get a finger print of a file (to ensure the file hasn't been written).
 #
 mtime() {
-  echo $(stat -c "%Y" $1)
+  stat -c "%Y" "$1"
 }
 
 chksum() {
-  echo $(md5sum $1)
+  md5sum "$1"
 }
