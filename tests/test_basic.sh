@@ -76,7 +76,7 @@ test_image() {
   # Make sure ABC has been added
   RUN "${GREP_OK}" "${BINARY} -f ${BIOS} -l | grep ABC | grep DEF"
   # Check format, expect the key string is in front of value string
-  RUN "${GREP_OK}" "${BINARY} -f ${BIOS} -l | grep -r 'ABC.*DEF'"
+  RUN "${GREP_OK}" "${BINARY} -f ${BIOS} -l | grep 'ABC.*DEF'"
 
   #
   # Test replacement
