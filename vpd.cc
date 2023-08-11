@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fmap.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -19,9 +20,10 @@
 #include <unistd.h>
 #include <uuid/uuid.h>
 
+#include <base/logging.h>
+
 extern "C" {
 #include "lib/flashrom.h"
-#include "lib/fmap.h"
 #include "lib/lib_smbios.h"
 #include "lib/lib_vpd.h"
 #include "lib/vpd.h"
@@ -441,42 +443,31 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf,
   assert(vpd_size);
 
   /* scan the file and find out the VPD partition. */
-  off_t sig_offset = fmapFind(read_buf, file_size);
-  if (-1 != sig_offset) {
-    /* FMAP signature is found, try to search the partition name in table. */
-    struct fmap* fmap = (struct fmap*)&read_buf[sig_offset];
-    for (int i = 0; i < fmap->nareas; i++) {
-      fmapNormalizeAreaName(fmap->areas[i].name);
-    }
-
-    if (FMAP_OK ==
-        fmapGetArea(fmap_vpd_area_name, fmap, vpd_offset, vpd_size)) {
-      /* Mark found here then saveFile() knows where to write back (vpd_offset,
-       * vpd_size). */
-      found_vpd = true;
-      return VPD_OK;
-    } else {
-      fprintf(stderr, "[ERROR] The VPD partition [%s] is not found.\n",
-              fmap_vpd_area_name);
-      return VPD_ERR_NOT_FOUND;
-    }
+  const off_t sig_offset = fmap_find(read_buf, file_size);
+  if (sig_offset < 0) {
+    return VPD_ERR_NOT_FOUND;
   }
 
-  /* The signature must be aligned to 16-byte. */
-  for (int i = 0; i < file_size; i += 16) {
-    if (isEps(&read_buf[i])) {
-      /* Mark found here then saveFile() knows where to write back (vpd_offset,
-       * vpd_size). */
-      found_vpd = true;
-      *vpd_offset = i;
-      /* FIXME: We don't know the VPD partition size in this case.
-       *        However, return 4K should be safe enough now.
-       *        In the long term, this code block will be obscured. */
-      *vpd_size = 4096;
-      return VPD_OK;
-    }
+  const struct fmap* fmap;
+  if (sig_offset + sizeof(*fmap) > file_size) {
+    LOG(ERROR) << "Bad FMAP at: " << sig_offset;
+    return VPD_FAIL;
   }
-  return VPD_ERR_NOT_FOUND;
+  /* FMAP signature is found, try to search the partition name in table. */
+  fmap = (const struct fmap*)(read_buf + sig_offset);
+
+  const struct fmap_area* area = fmap_find_area(fmap, fmap_vpd_area_name);
+  if (!area) {
+    LOG(ERROR) << "The VPD partition [" << fmap_vpd_area_name
+               << "] is not found.";
+    return VPD_ERR_NOT_FOUND;
+  }
+  *vpd_offset = area->offset;
+  *vpd_size = area->size;
+  /* Mark found here then saveFile() knows where to write back (vpd_offset,
+   * vpd_size). */
+  found_vpd = true;
+  return VPD_OK;
 }
 
 vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
@@ -1096,9 +1087,6 @@ int main(int argc, char* argv[]) {
     retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
-
-  /* to avoid malicious attack, we replace suspicious chars. */
-  fmapNormalizeAreaName(fmap_vpd_area_name);
 
   /* if no filename is specified, call flashrom to read from flash. */
   if (!filename) {
