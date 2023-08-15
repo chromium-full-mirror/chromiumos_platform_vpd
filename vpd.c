@@ -35,9 +35,6 @@
   "# Or an empty line followed by other commands.\n"                    \
   "#\n"
 
-/* Forward reference(s) */
-static uint8_t *readFileContent(const char* filename, uint32_t *filesize);
-
 /* Linked list to track temporary files
  */
 struct TempfileNode {
@@ -250,6 +247,39 @@ static int isbase64(uint8_t c)
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
 }
 
+
+/* Load file content into memory.
+ * Returns: NULL if file opens error or read error.
+ *          Others, pointer to the memory. The filesize is also returned.
+ *
+ * Note: it's caller's responsbility to free the memory.
+ */
+static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
+  FILE *fp;
+
+  assert(filename);
+  assert(filesize);
+
+  if (!(fp = fopen(filename, "r"))) {
+    return NULL;
+  }
+  /* get file size */
+  fseek(fp, 0, SEEK_END);
+  *filesize = ftell(fp);
+
+  /* read file content */
+  fseek(fp, 0, SEEK_SET);
+  uint8_t *read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
+  assert(read_buf);
+  if (*filesize != fread(read_buf, 1, *filesize, fp)) {
+    fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
+    return NULL;
+  }
+  fclose(fp);
+
+  return read_buf;
+}
+
 static uint8_t *read_string_from_file(const char *file_name)
 {
 
@@ -458,39 +488,6 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
     }
   }
   return VPD_ERR_NOT_FOUND;
-}
-
-
-/* Load file content into memory.
- * Returns: NULL if file opens error or read error.
- *          Others, pointer to the memory. The filesize is also returned.
- *
- * Note: it's caller's responsbility to free the memory.
- */
-static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
-  FILE *fp;
-
-  assert(filename);
-  assert(filesize);
-
-  if (!(fp = fopen(filename, "r"))) {
-    return NULL;
-  }
-  /* get file size */
-  fseek(fp, 0, SEEK_END);
-  *filesize = ftell(fp);
-
-  /* read file content */
-  fseek(fp, 0, SEEK_SET);
-  uint8_t *read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
-  assert(read_buf);
-  if (*filesize != fread(read_buf, 1, *filesize, fp)) {
-    fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
-    return NULL;
-  }
-  fclose(fp);
-
-  return read_buf;
 }
 
 
