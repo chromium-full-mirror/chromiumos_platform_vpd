@@ -5,6 +5,7 @@
  *
  */
 #include <assert.h>
+#include <stdbool.h>
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
@@ -91,7 +92,7 @@ char fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
 
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFlie(). */
-int found_vpd = 0;
+bool found_vpd = false;
 
 /* The VPD partition offset and size in buf[]. The whole partition includes:
  *
@@ -118,17 +119,15 @@ int32_t spd_len = 256;  /* max value for DDR3 */
  */
 const char *myMkTemp() {
   char tmp_file[] = "/tmp/vpd.flashrom.XXXXXX";
-  struct TempfileNode *node;
-  int fd;
 
-  fd = mkstemp(tmp_file);
+  int fd = mkstemp(tmp_file);
   if (fd < 0) {
     fprintf(stderr, "mkstemp(%s) failed\n", tmp_file);
     return NULL;
   }
 
   close(fd);
-  node = (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
+  struct TempfileNode *node = (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
   assert(node);
   node->next = tempfile_list;
   node->filename = strdup(tmp_file);
@@ -142,10 +141,8 @@ const char *myMkTemp() {
 /*  Erases all files created by myMkTemp
  */
 void cleanTempFiles() {
-  struct TempfileNode *node;
-
   while (tempfile_list) {
-    node = tempfile_list;
+    struct TempfileNode *node = tempfile_list;
     tempfile_list = node->next;
     if (unlink(node->filename) < 0) {
       fprintf(stderr, "warning: failed removing temporary file: %s\n",
@@ -257,10 +254,8 @@ static uint8_t *read_string_from_file(const char *file_name)
 {
 
   uint32_t i, j, file_size;
-  uint8_t *file_buffer;
 
-  file_buffer = readFileContent(file_name, &file_size);
-
+  uint8_t *file_buffer = readFileContent(file_name, &file_size);
   if (!file_buffer)
     return NULL; /* The error has been reported already. */
 
@@ -310,12 +305,11 @@ static vpd_err_t checkKeyName(const uint8_t *name) {
  * contain characters a-z, A-Z, 0-9 or dash (-).
  */
 static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
-  vpd_err_t retval = VPD_OK;
   int is_serial_number = 0;
   size_t value_len = 0;
   unsigned char c;
 
-  retval = checkKeyName(key);
+  vpd_err_t retval = checkKeyName(key);
   if (retval != VPD_OK)
     return retval;
 
@@ -361,13 +355,12 @@ static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
  */
-vpd_err_t parseString(const uint8_t *string, int read_from_file) {
-  uint8_t *key;
+vpd_err_t parseString(const uint8_t *string, bool read_from_file) {
   uint8_t *value;
   uint8_t *file_contents = NULL;
   vpd_err_t retval = VPD_OK;
 
-  key = (uint8_t*)strdup((char*)string);
+  uint8_t *key = (uint8_t*)strdup((char*)string);
   if (!key || key[0] == '\0' || key[0] == '=') {
     if (key) free(key);
     return VPD_ERR_SYNTAX;
@@ -426,26 +419,22 @@ int isEps(const void* ptr) {
  */
 vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
                      uint32_t* vpd_offset, uint32_t* vpd_size) {
-  off_t sig_offset;
-  struct fmap *fmap;
-  int i;
-
   assert(read_buf);
   assert(vpd_offset);
   assert(vpd_size);
 
   /* scan the file and find out the VPD partition. */
-  sig_offset = fmapFind(read_buf, file_size);
+  off_t sig_offset = fmapFind(read_buf, file_size);
   if (-1 != sig_offset) {
     /* FMAP signature is found, try to search the partition name in table. */
-    fmap = (struct fmap *)&read_buf[sig_offset];
-    for(i = 0; i < fmap->nareas; i++) {
+    struct fmap *fmap = (struct fmap *)&read_buf[sig_offset];
+    for (int i = 0; i < fmap->nareas; i++) {
       fmapNormalizeAreaName(fmap->areas[i].name);
     }
 
     if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
                                vpd_offset, vpd_size)) {
-      found_vpd = 1;  /* Mark found here then saveFile() knows where to
+      found_vpd = true;  /* Mark found here then saveFile() knows where to
                        * write back (vpd_offset, vpd_size). */
       return VPD_OK;
     } else {
@@ -456,9 +445,9 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
   }
 
   /* The signature must be aligned to 16-byte. */
-  for (i = 0; i < file_size; i += 16) {
+  for (int i = 0; i < file_size; i += 16) {
     if (isEps(&read_buf[i])) {
-      found_vpd = 1;  /* Mark found here then saveFile() knows where to
+      found_vpd = true;  /* Mark found here then saveFile() knows where to
                        * write back (vpd_offset, vpd_size). */
       *vpd_offset = i;
       /* FIXME: We don't know the VPD partition size in this case.
@@ -480,7 +469,6 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
  */
 static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
   FILE *fp;
-  uint8_t *read_buf;
 
   assert(filename);
   assert(filesize);
@@ -494,7 +482,7 @@ static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
   /* read file content */
   fseek(fp, 0, SEEK_SET);
-  read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
+  uint8_t *read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
   assert(read_buf);
   if (*filesize != fread(read_buf, 1, *filesize, fp)) {
     fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
@@ -507,12 +495,10 @@ static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
 
 vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
-  const char *filename;
-  uint8_t *buf;
   uint32_t buf_size;
-  vpd_err_t retval;
+  vpd_err_t retval = VPD_OK;
 
-  filename = myMkTemp();
+  const char *filename = myMkTemp();
   if (!filename) {
     return VPD_ERR_SYSTEM;
   }
@@ -521,13 +507,11 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
     fprintf(stderr, "[WARN] Cannot read full BIOS.\n");
     return VPD_ERR_ROM_READ;
   }
-  buf = readFileContent(filename, &buf_size);
+  uint8_t *buf = readFileContent(filename, &buf_size);
   assert(buf);
   if (findVpdPartition(buf, buf_size, offset, size)) {
     fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
     retval = VPD_ERR_INVALID;
-  } else {
-    retval = VPD_OK;
   }
   free(buf);
   return retval;
@@ -541,10 +525,9 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
  */
 static uint8_t* extractString(const uint8_t* value, const int max_len) {
   static uint8_t buf[128];
-  int copy_len;
 
   /* not longer than the buffer size */
-  copy_len = (max_len > sizeof(buf) - 1) ? sizeof(buf) - 1 : max_len;
+  const int copy_len = (max_len > sizeof(buf) - 1) ? sizeof(buf) - 1 : max_len;
   memcpy(buf, value, copy_len);
   buf[copy_len] = '\0';
 
@@ -603,7 +586,7 @@ teardown:
 }
 
 vpd_err_t loadFile(const char *filename, struct PairContainer *container,
-             int overwrite_it) {
+             bool overwrite_it) {
   uint32_t file_size;
   uint8_t *read_buf;
   uint8_t *vpd_buf;
@@ -866,21 +849,18 @@ teardown:
 vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
              int write_back_to_flash) {
   FILE *fp;
-  unsigned char eps[1024];
-  int eps_len = 0;
-  vpd_err_t retval = VPD_OK;
-  uint32_t file_seek;
-  struct google_vpd_info *info = (struct google_vpd_info *)buf;
 
+  unsigned char eps[1024];
   memset(eps, 0xff, sizeof(eps));
-  buf_len = sizeof(*info);
 
   /* prepare info */
-  memset(info, 0, sizeof(*info));
+  struct google_vpd_info *info = (struct google_vpd_info *)buf;
+  buf_len = sizeof(*info);
+  memset(info, 0, buf_len);
   memcpy(info->header.magic, VPD_INFO_MAGIC, sizeof(info->header.magic));
 
   /* encode into buffer */
-  retval = encodeContainer(&file, max_buf_len, buf, &buf_len);
+  vpd_err_t retval = encodeContainer(&file, max_buf_len, buf, &buf_len);
   if (VPD_OK != retval) {
     fprintf(stderr, "encodeContainer() error.\n");
     goto teardown;
@@ -892,6 +872,7 @@ vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
   }
   info->size = buf_len - sizeof(*info);
 
+  int eps_len = 0;
   retval = buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len);
   if (VPD_OK != retval) {
     fprintf(stderr, "Cannot build EPS.\n");
@@ -922,11 +903,7 @@ vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
     }
   }
 
-  if (write_back_to_flash) {
-    file_seek = 0;
-  } else {
-    file_seek = vpd_offset;
-  }
+  const uint32_t file_seek = write_back_to_flash ? 0 : vpd_offset;
 
   /* write EPS */
   fseek(fp, file_seek + eps_offset, SEEK_SET);
@@ -1020,12 +997,12 @@ int main(int argc, char *argv[]) {
   const char *tmp_full_file = NULL;
   uint8_t *key_to_export = NULL;
   int write_back_to_flash = 0;
-  int list_it = 0;
-  int overwrite_it = 0;
+  bool list_it = false;
+  bool overwrite_it = false;
   int modified = 0;
   int num_to_delete;
-  int read_from_file = 0;
-  int raw_input = 0;
+  bool read_from_file = false;
+  bool raw_input = false;
 
   initContainer(&file);
   initContainer(&set_argument);
@@ -1058,7 +1035,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'S':
-        read_from_file = 1;
+        read_from_file = true;
         /* Fall through into the next case */
       case 's':
         retval = parseString((uint8_t*)optarg, read_from_file);
@@ -1066,7 +1043,7 @@ int main(int argc, char *argv[]) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           goto teardown;
         }
-        read_from_file = 0;
+        read_from_file = false;
         break;
 
       case 'p':
@@ -1087,11 +1064,11 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'l':
-        list_it = 1;
+        list_it = true;
         break;
 
       case 'O':
-        overwrite_it = 1;
+        overwrite_it = true;
         modified = 1;  /* This option forces to write empty data back even
                         * no new pair is given. */
         break;
@@ -1112,7 +1089,7 @@ int main(int argc, char *argv[]) {
         break;
 
       case 'R':
-        raw_input = 1;
+        raw_input = true;
         break;
 
       case 0:
