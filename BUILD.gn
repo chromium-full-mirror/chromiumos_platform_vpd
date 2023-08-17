@@ -29,7 +29,7 @@ vpd_c_sources = [
 ]
 
 executable("vpd") {
-  sources = [ "vpd.c" ] + vpd_c_sources
+  sources = [ "vpd.cc" ] + vpd_c_sources
   configs += [
     ":target_defaults",
     ":vpd_c",

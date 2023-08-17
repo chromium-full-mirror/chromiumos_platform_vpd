@@ -10,6 +10,7 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,12 +19,14 @@
 #include <unistd.h>
 #include <uuid/uuid.h>
 
+extern "C" {
 #include "lib/flashrom.h"
 #include "lib/fmap.h"
 #include "lib/lib_smbios.h"
 #include "lib/lib_vpd.h"
 #include "lib/vpd.h"
 #include "lib/vpd_tables.h"
+};
 
 /* The buffer length. Right now the VPD partition size on flash is 128KB. */
 #define BUF_LEN (128 * 1024)
@@ -49,7 +52,9 @@ enum FileFlag {
   HAS_VPD_1_2 = (1 << 2),
   /* TODO(yjlou): refine those variables in main() to here:
    *              write_back_to_flash, overwrite_it, modified. */
-} file_flag = 0;
+};
+/* Bitmask of FileFlag. */
+int file_flag = 0;
 
 /* 2 containers:
  *   file:      stores decoded pairs from file.
@@ -119,8 +124,8 @@ const char* myMkTemp() {
   }
 
   close(fd);
-  struct TempfileNode* node =
-      (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
+  struct TempfileNode* node = reinterpret_cast<struct TempfileNode*>(
+      malloc(sizeof(struct TempfileNode)));
   assert(node);
   node->next = tempfile_list;
   node->filename = strdup(tmp_file);
@@ -254,7 +259,8 @@ static uint8_t* readFileContent(const char* filename, uint32_t* filesize) {
 
   /* read file content */
   fseek(fp, 0, SEEK_SET);
-  uint8_t* read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
+  uint8_t* read_buf = reinterpret_cast<uint8_t*>(
+      malloc(*filesize + 1)); /* Might need room for a \0. */
   assert(read_buf);
   if (*filesize != fread(read_buf, 1, *filesize, fp)) {
     fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
@@ -292,7 +298,7 @@ static uint8_t* read_string_from_file(const char* file_name) {
   }
   file_buffer[j] = '\0';
 
-  return (uint8_t*)file_buffer;
+  return file_buffer;
 }
 
 /*
@@ -368,7 +374,8 @@ vpd_err_t parseString(const uint8_t* string, bool read_from_file) {
   uint8_t* file_contents = NULL;
   vpd_err_t retval = VPD_OK;
 
-  uint8_t* key = (uint8_t*)strdup((char*)string);
+  uint8_t* key =
+      reinterpret_cast<uint8_t*>(strdup(reinterpret_cast<const char*>(string)));
   if (!key || key[0] == '\0' || key[0] == '=') {
     if (key)
       free(key);
@@ -660,9 +667,10 @@ vpd_err_t loadFile(const char* filename,
 
   /* EPS is done above. Parse structure tables below. */
   /* Get the first type 241 blob, at the tail of EPS. */
-  header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
-  data = (struct vpd_table_binary_blob_pointer*)((uint8_t*)header +
-                                                 sizeof(*header));
+  header = reinterpret_cast<struct vpd_header*>(
+      reinterpret_cast<uint8_t*>(eps) + eps->entry_length);
+  data = reinterpret_cast<struct vpd_table_binary_blob_pointer*>(
+      reinterpret_cast<uint8_t*>(header) + sizeof(*header));
 
   /* prepare data structure to compare */
   uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
@@ -727,7 +735,7 @@ vpd_err_t loadFile(const char* filename,
         goto teardown;
       }
 
-      if (!(spd_data = malloc(spd_len))) {
+      if (!(spd_data = reinterpret_cast<uint8_t*>(malloc(spd_len)))) {
         fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
         retval = VPD_ERR_SYSTEM;
         goto teardown;
@@ -759,25 +767,25 @@ vpd_err_t loadFile(const char* filename,
         uint8_t ssd_sn[0x10];
         uint8_t mem_sn[0x10];
         uint8_t wlan_mac[0x06];
-      }* v12 = (void*)&vpd_buf[index];
-      setString(container, (uint8_t*)"Product_SN",
+      }* v12 = reinterpret_cast<struct V12*>(&vpd_buf[index]);
+      setString(container, reinterpret_cast<const uint8_t*>("Product_SN"),
                 extractString(v12->prod_sn, sizeof(v12->prod_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"SKU",
+      setString(container, reinterpret_cast<const uint8_t*>("SKU"),
                 extractString(v12->sku, sizeof(v12->sku)), VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"UUID",
+      setString(container, reinterpret_cast<const uint8_t*>("UUID"),
                 extractHex(v12->uuid, sizeof(v12->uuid)), VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"MotherBoard_SN",
+      setString(container, reinterpret_cast<const uint8_t*>("MotherBoard_SN"),
                 extractString(v12->mb_sn, sizeof(v12->mb_sn)), VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"IMEI",
+      setString(container, reinterpret_cast<const uint8_t*>("IMEI"),
                 extractString(v12->imei, sizeof(v12->imei)), VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"SSD_SN",
+      setString(container, reinterpret_cast<const uint8_t*>("SSD_SN"),
                 extractString(v12->ssd_sn, sizeof(v12->ssd_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"Memory_SN",
+      setString(container, reinterpret_cast<const uint8_t*>("Memory_SN"),
                 extractString(v12->mem_sn, sizeof(v12->mem_sn)),
                 VPD_AS_LONG_AS);
-      setString(container, (uint8_t*)"WLAN_MAC",
+      setString(container, reinterpret_cast<const uint8_t*>("WLAN_MAC"),
                 extractHex(v12->wlan_mac, sizeof(v12->wlan_mac)),
                 VPD_AS_LONG_AS);
       file_flag |= HAS_VPD_1_2;
@@ -799,9 +807,10 @@ vpd_err_t loadFile(const char* filename,
       goto teardown;
     }
 
-    header = (struct vpd_header*)((uint8_t*)header + table_len);
-    data = (struct vpd_table_binary_blob_pointer*)((uint8_t*)header +
-                                                   sizeof(*header));
+    header = reinterpret_cast<struct vpd_header*>(
+        reinterpret_cast<uint8_t*>(header) + table_len);
+    data = reinterpret_cast<struct vpd_table_binary_blob_pointer*>(
+        reinterpret_cast<uint8_t*>(header) + sizeof(*header));
   }
 
 teardown:
@@ -981,7 +990,8 @@ int main(int argc, char* argv[]) {
         read_from_file = true;
         /* Fall through into the next case */
       case 's':
-        retval = parseString((uint8_t*)optarg, read_from_file);
+        retval =
+            parseString(reinterpret_cast<uint8_t*>(optarg), read_from_file);
         if (VPD_OK != retval) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           goto teardown;
@@ -991,7 +1001,7 @@ int main(int argc, char* argv[]) {
 
       case 'p':
         errno = 0;
-        pad_value_len = strtol(optarg, (char**)NULL, 0);
+        pad_value_len = strtol(optarg, NULL, 0);
 
         /* FIXME: this is not a stable way to detect error because
          *        implementation may (or may not) assign errno. */
@@ -1018,7 +1028,7 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'g':
-        key_to_export = (uint8_t*)strdup(optarg);
+        key_to_export = reinterpret_cast<uint8_t*>(strdup(optarg));
         break;
 
       case 'd':
