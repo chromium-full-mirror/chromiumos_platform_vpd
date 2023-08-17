@@ -5,22 +5,23 @@
  *
  */
 #include <assert.h>
-#include <stdbool.h>
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
+
 #include "lib/flashrom.h"
 #include "lib/fmap.h"
-#include "lib/lib_vpd.h"
 #include "lib/lib_smbios.h"
+#include "lib/lib_vpd.h"
 #include "lib/vpd.h"
 #include "lib/vpd_tables.h"
 
@@ -28,20 +29,19 @@
 #define BUF_LEN (128 * 1024)
 
 /* The comment shown in the begin of --sh output */
-#define SH_COMMENT                                                      \
-  "#\n"                                                                 \
-  "# Prepend 'vpd -O' before this text to always reset VPD content.\n"  \
-  "# Append more -s at end to set additional key/values.\n"             \
-  "# Or an empty line followed by other commands.\n"                    \
+#define SH_COMMENT                                                     \
+  "#\n"                                                                \
+  "# Prepend 'vpd -O' before this text to always reset VPD content.\n" \
+  "# Append more -s at end to set additional key/values.\n"            \
+  "# Or an empty line followed by other commands.\n"                   \
   "#\n"
 
 /* Linked list to track temporary files
  */
 struct TempfileNode {
-  char *filename;
-  struct TempfileNode *next;
-} *tempfile_list = NULL;
-
+  char* filename;
+  struct TempfileNode* next;
+}* tempfile_list = NULL;
 
 enum FileFlag {
   HAS_SPD = (1 << 0),
@@ -50,7 +50,6 @@ enum FileFlag {
   /* TODO(yjlou): refine those variables in main() to here:
    *              write_back_to_flash, overwrite_it, modified. */
 } file_flag = 0;
-
 
 /* 2 containers:
  *   file:      stores decoded pairs from file.
@@ -95,22 +94,22 @@ bool found_vpd = false;
  *   VPD 2.0 data
  *
  */
-uint32_t vpd_offset = 0, vpd_size;  /* The whole partition */
+uint32_t vpd_offset = 0, vpd_size; /* The whole partition */
 /* Below offset are related to vpd_offset and assume positive.
  * Those are used in saveFile() to write back data. */
-uint32_t eps_offset = 0;  /* EPS's starting address. Tables[] is following. */
-uint32_t spd_offset = GOOGLE_SPD_OFFSET;  /* SPD address .*/
-off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET;  /* VPD 2.0 data address. */
+uint32_t eps_offset = 0; /* EPS's starting address. Tables[] is following. */
+uint32_t spd_offset = GOOGLE_SPD_OFFSET;      /* SPD address .*/
+off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
 
 /* This points to the SPD data if it is availiable when loadFile().
  * The memory is allocated in loadFile(), will be used in saveFile(),
  * and freed at end of main(). */
-uint8_t *spd_data = NULL;
-int32_t spd_len = 256;  /* max value for DDR3 */
+uint8_t* spd_data = NULL;
+int32_t spd_len = 256; /* max value for DDR3 */
 
 /* Creates a temporary file and return the filename, or NULL for any failure.
  */
-const char *myMkTemp() {
+const char* myMkTemp() {
   char tmp_file[] = "/tmp/vpd.flashrom.XXXXXX";
 
   int fd = mkstemp(tmp_file);
@@ -120,7 +119,8 @@ const char *myMkTemp() {
   }
 
   close(fd);
-  struct TempfileNode *node = (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
+  struct TempfileNode* node =
+      (struct TempfileNode*)malloc(sizeof(struct TempfileNode));
   assert(node);
   node->next = tempfile_list;
   node->filename = strdup(tmp_file);
@@ -130,12 +130,11 @@ const char *myMkTemp() {
   return node->filename;
 }
 
-
 /*  Erases all files created by myMkTemp
  */
 void cleanTempFiles() {
   while (tempfile_list) {
-    struct TempfileNode *node = tempfile_list;
+    struct TempfileNode* node = tempfile_list;
     tempfile_list = node->next;
     if (unlink(node->filename) < 0) {
       fprintf(stderr, "warning: failed removing temporary file: %s\n",
@@ -146,17 +145,15 @@ void cleanTempFiles() {
   }
 }
 
-
 /*  Given the offset of blob block (related to the first byte of EPS) and
  *  the size of blob, the is function generates an SMBIOS ESP.
  */
-vpd_err_t buildEpsAndTables(
-    const int size_blob,
-    const int max_buf_len,
-    unsigned char *buf,
-    int *generated) {
-  struct vpd_entry *eps;
-  unsigned char *table = NULL;          /* the structure table */
+vpd_err_t buildEpsAndTables(const int size_blob,
+                            const int max_buf_len,
+                            unsigned char* buf,
+                            int* generated) {
+  struct vpd_entry* eps;
+  unsigned char* table = NULL; /* the structure table */
   int table_len = 0;
   int num_structures = 0;
   vpd_err_t retval = VPD_OK;
@@ -168,13 +165,10 @@ vpd_err_t buildEpsAndTables(
   buf += *generated;
 
   /* Generate type 241 - SPD data */
-  table_len = vpd_append_type241(0, &table, table_len,
-                                 GOOGLE_SPD_UUID,
-                                 eps_base + GOOGLE_SPD_OFFSET,
-                                 spd_len,  /* Max length for DDR3 */
-                                 GOOGLE_SPD_VENDOR,
-                                 GOOGLE_SPD_DESCRIPTION,
-                                 GOOGLE_SPD_VARIANT);
+  table_len = vpd_append_type241(
+      0, &table, table_len, GOOGLE_SPD_UUID, eps_base + GOOGLE_SPD_OFFSET,
+      spd_len, /* Max length for DDR3 */
+      GOOGLE_SPD_VENDOR, GOOGLE_SPD_DESCRIPTION, GOOGLE_SPD_VARIANT);
   if (table_len < 0) {
     retval = VPD_FAIL;
     goto error_1;
@@ -187,14 +181,11 @@ vpd_err_t buildEpsAndTables(
    */
 
   /* Generate type 241 - VPD 2.0 */
-  table_len = vpd_append_type241(1, &table, table_len,
-                                 GOOGLE_VPD_2_0_UUID,
-                                 (eps_base + GOOGLE_VPD_2_0_OFFSET +
-                                  sizeof(struct google_vpd_info)),
-                                 size_blob,
-                                 GOOGLE_VPD_2_0_VENDOR,
-                                 GOOGLE_VPD_2_0_DESCRIPTION,
-                                 GOOGLE_VPD_2_0_VARIANT);
+  table_len = vpd_append_type241(
+      1, &table, table_len, GOOGLE_VPD_2_0_UUID,
+      (eps_base + GOOGLE_VPD_2_0_OFFSET + sizeof(struct google_vpd_info)),
+      size_blob, GOOGLE_VPD_2_0_VENDOR, GOOGLE_VPD_2_0_DESCRIPTION,
+      GOOGLE_VPD_2_0_VARIANT);
   if (table_len < 0) {
     retval = VPD_FAIL;
     goto error_1;
@@ -238,11 +229,9 @@ error_1:
   return retval;
 }
 
-static int isbase64(uint8_t c)
-{
+static int isbase64(uint8_t c) {
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
 }
-
 
 /* Load file content into memory.
  * Returns: NULL if file opens error or read error.
@@ -250,8 +239,8 @@ static int isbase64(uint8_t c)
  *
  * Note: it's caller's responsbility to free the memory.
  */
-static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
-  FILE *fp;
+static uint8_t* readFileContent(const char* filename, uint32_t* filesize) {
+  FILE* fp;
 
   assert(filename);
   assert(filesize);
@@ -265,7 +254,7 @@ static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
 
   /* read file content */
   fseek(fp, 0, SEEK_SET);
-  uint8_t *read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
+  uint8_t* read_buf = malloc(*filesize + 1); /* Might need room for a \0. */
   assert(read_buf);
   if (*filesize != fread(read_buf, 1, *filesize, fp)) {
     fprintf(stderr, "[ERROR] Reading file [%s] failed.\n", filename);
@@ -276,12 +265,10 @@ static uint8_t *readFileContent(const char* filename, uint32_t *filesize) {
   return read_buf;
 }
 
-static uint8_t *read_string_from_file(const char *file_name)
-{
-
+static uint8_t* read_string_from_file(const char* file_name) {
   uint32_t i, j, file_size;
 
-  uint8_t *file_buffer = readFileContent(file_name, &file_size);
+  uint8_t* file_buffer = readFileContent(file_name, &file_size);
   if (!file_buffer)
     return NULL; /* The error has been reported already. */
 
@@ -293,7 +280,7 @@ static uint8_t *read_string_from_file(const char *file_name)
     uint8_t c = file_buffer[i];
 
     if ((c == 0xa) || (c == 0xd))
-      continue;  /* Skip EOL characters */
+      continue; /* Skip EOL characters */
 
     if (!isbase64(c)) {
       fprintf(stderr, "[ERROR] file %s is not in base64 format (%c at %d)\n",
@@ -305,14 +292,13 @@ static uint8_t *read_string_from_file(const char *file_name)
   }
   file_buffer[j] = '\0';
 
-  return (uint8_t *)file_buffer;
+  return (uint8_t*)file_buffer;
 }
-
 
 /*
  * Check if given key name is compliant to recommended format.
  */
-static vpd_err_t checkKeyName(const uint8_t *name) {
+static vpd_err_t checkKeyName(const uint8_t* name) {
   unsigned char c;
   while ((c = *name++)) {
     if (!(isalnum(c) || c == '_' || c == '.')) {
@@ -323,14 +309,13 @@ static vpd_err_t checkKeyName(const uint8_t *name) {
   return VPD_OK;
 }
 
-
 /*
  * Check if key and value are compliant to recommended format.
  * For the checker of the key, see the function |checkKeyName|.
  * If key is "serial_number" or "mlb_serial_number", the value should only
  * contain characters a-z, A-Z, 0-9 or dash (-).
  */
-static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
+static vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
   int is_serial_number = 0;
   size_t value_len = 0;
   unsigned char c;
@@ -339,11 +324,9 @@ static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
   if (retval != VPD_OK)
     return retval;
 
-  if (strncmp("serial_number",
-              (const char*)key,
-              sizeof("serial_number")) == 0 ||
-      strncmp("mlb_serial_number",
-              (const char*)key,
+  if (strncmp("serial_number", (const char*)key, sizeof("serial_number")) ==
+          0 ||
+      strncmp("mlb_serial_number", (const char*)key,
               sizeof("mlb_serial_number")) == 0)
     is_serial_number = 1;
 
@@ -375,20 +358,20 @@ static vpd_err_t checkKeyValuePair(const uint8_t *key, const uint8_t *value) {
   return VPD_OK;
 }
 
-
 /*
  * Given a key=value string, this function parses it and adds to arugument
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
  */
-vpd_err_t parseString(const uint8_t *string, bool read_from_file) {
-  uint8_t *value;
-  uint8_t *file_contents = NULL;
+vpd_err_t parseString(const uint8_t* string, bool read_from_file) {
+  uint8_t* value;
+  uint8_t* file_contents = NULL;
   vpd_err_t retval = VPD_OK;
 
-  uint8_t *key = (uint8_t*)strdup((char*)string);
+  uint8_t* key = (uint8_t*)strdup((char*)string);
   if (!key || key[0] == '\0' || key[0] == '=') {
-    if (key) free(key);
+    if (key)
+      free(key);
     return VPD_ERR_SYNTAX;
   }
 
@@ -397,13 +380,14 @@ vpd_err_t parseString(const uint8_t *string, bool read_from_file) {
    * If '=' is not found, the whole string is the key and
    * the value points to the end of string ('\0').
    */
-  for (value = key; *value && *value != '='; value++);
+  for (value = key; *value && *value != '='; value++) {
+  }
   if (*value == '=') {
     *(value++) = '\0';
 
     if (read_from_file) {
       /* 'value' in fact is a file name */
-      file_contents = read_string_from_file((const char *)value);
+      file_contents = read_string_from_file((const char*)value);
       if (!file_contents) {
         free(key);
         return VPD_ERR_SYNTAX;
@@ -423,13 +407,11 @@ vpd_err_t parseString(const uint8_t *string, bool read_from_file) {
   return retval;
 }
 
-
 /* Given an address, compare if it is SMBIOS signature ("_SM_"). */
 int isEps(const void* ptr) {
   return !memcmp(VPD_ENTRY_MAGIC, ptr, sizeof(VPD_ENTRY_MAGIC) - 1);
-  /* TODO(yjlou): need more EPS sanity checks here. */
+  /* TODO(yjlou): need more EPS validity checks here. */
 }
-
 
 /* There are two possible file content appearng here:
  *   1. a full and complete BIOS file
@@ -443,8 +425,10 @@ int isEps(const void* ptr) {
  *
  * If found, vpd_offset and vpd_size are updated.
  */
-vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
-                     uint32_t* vpd_offset, uint32_t* vpd_size) {
+vpd_err_t findVpdPartition(const uint8_t* read_buf,
+                           const uint32_t file_size,
+                           uint32_t* vpd_offset,
+                           uint32_t* vpd_size) {
   assert(read_buf);
   assert(vpd_offset);
   assert(vpd_size);
@@ -453,15 +437,16 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
   off_t sig_offset = fmapFind(read_buf, file_size);
   if (-1 != sig_offset) {
     /* FMAP signature is found, try to search the partition name in table. */
-    struct fmap *fmap = (struct fmap *)&read_buf[sig_offset];
+    struct fmap* fmap = (struct fmap*)&read_buf[sig_offset];
     for (int i = 0; i < fmap->nareas; i++) {
       fmapNormalizeAreaName(fmap->areas[i].name);
     }
 
-    if (FMAP_OK == fmapGetArea(fmap_vpd_area_name, fmap,
-                               vpd_offset, vpd_size)) {
-      found_vpd = true;  /* Mark found here then saveFile() knows where to
-                       * write back (vpd_offset, vpd_size). */
+    if (FMAP_OK ==
+        fmapGetArea(fmap_vpd_area_name, fmap, vpd_offset, vpd_size)) {
+      /* Mark found here then saveFile() knows where to write back (vpd_offset,
+       * vpd_size). */
+      found_vpd = true;
       return VPD_OK;
     } else {
       fprintf(stderr, "[ERROR] The VPD partition [%s] is not found.\n",
@@ -473,8 +458,9 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
   /* The signature must be aligned to 16-byte. */
   for (int i = 0; i < file_size; i += 16) {
     if (isEps(&read_buf[i])) {
-      found_vpd = true;  /* Mark found here then saveFile() knows where to
-                       * write back (vpd_offset, vpd_size). */
+      /* Mark found here then saveFile() knows where to write back (vpd_offset,
+       * vpd_size). */
+      found_vpd = true;
       *vpd_offset = i;
       /* FIXME: We don't know the VPD partition size in this case.
        *        However, return 4K should be safe enough now.
@@ -486,12 +472,11 @@ vpd_err_t findVpdPartition(const uint8_t* read_buf, const uint32_t file_size,
   return VPD_ERR_NOT_FOUND;
 }
 
-
 vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
   uint32_t buf_size;
   vpd_err_t retval = VPD_OK;
 
-  const char *filename = myMkTemp();
+  const char* filename = myMkTemp();
   if (!filename) {
     return VPD_ERR_SYSTEM;
   }
@@ -500,7 +485,7 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
     fprintf(stderr, "[WARN] Cannot read full BIOS.\n");
     return VPD_ERR_ROM_READ;
   }
-  uint8_t *buf = readFileContent(filename, &buf_size);
+  uint8_t* buf = readFileContent(filename, &buf_size);
   assert(buf);
   if (findVpdPartition(buf, buf_size, offset, size)) {
     fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
@@ -509,7 +494,6 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
   free(buf);
   return retval;
 }
-
 
 /* Below 2 functions are the helper functions for extract data from VPD 1.x
  * binary-encoded structure.
@@ -528,16 +512,17 @@ static uint8_t* extractString(const uint8_t* value, const int max_len) {
 }
 
 static uint8_t* extractHex(const uint8_t* value, const int len) {
-  char tmp[4];  /* for a hex string */
+  char tmp[4]; /* for a hex string */
   static uint8_t buf[128];
-  int in, out;  /* in points to value[], while out points to buf[]. */
+  int in, out; /* in points to value[], while out points to buf[]. */
 
   for (in = 0, out = 0;; ++in) {
     if (out + 3 > sizeof(buf) - 1) {
-      goto end_of_func;  /* no more buffer */
+      goto end_of_func; /* no more buffer */
     }
-    if (in >= len) {  /* no more input */
-      if (out) --out;  /* remove the tailing colon */
+    if (in >= len) { /* no more input */
+      if (out)
+        --out; /* remove the tailing colon */
       goto end_of_func;
     }
     sprintf(tmp, "%02x:", value[in]);
@@ -551,8 +536,8 @@ end_of_func:
   return buf;
 }
 
-vpd_err_t loadRawFile(const char *filename, struct PairContainer *container) {
-  uint8_t *vpd_buf;
+vpd_err_t loadRawFile(const char* filename, struct PairContainer* container) {
+  uint8_t* vpd_buf;
   uint32_t index, file_size;
   vpd_err_t retval = VPD_OK;
 
@@ -561,10 +546,8 @@ vpd_err_t loadRawFile(const char *filename, struct PairContainer *container) {
     return VPD_ERR_SYSTEM;
   }
 
-  for (index = 0;
-       index < file_size &&
-       vpd_buf[index] != VPD_TYPE_TERMINATOR &&
-       vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+  for (index = 0; index < file_size && vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+                  vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
     retval = decodeToContainer(container, file_size, vpd_buf, &index);
     if (VPD_OK != retval) {
       fprintf(stderr, "decodeToContainer() error.\n");
@@ -578,15 +561,16 @@ teardown:
   return retval;
 }
 
-vpd_err_t loadFile(const char *filename, struct PairContainer *container,
-             bool overwrite_it) {
+vpd_err_t loadFile(const char* filename,
+                   struct PairContainer* container,
+                   bool overwrite_it) {
   uint32_t file_size;
-  uint8_t *read_buf;
-  uint8_t *vpd_buf;
-  struct vpd_entry *eps;
+  uint8_t* read_buf;
+  uint8_t* vpd_buf;
+  struct vpd_entry* eps;
   uint32_t related_eps_base;
-  struct vpd_header *header;
-  struct vpd_table_binary_blob_pointer *data;
+  struct vpd_header* header;
+  struct vpd_table_binary_blob_pointer* data;
   uint8_t spd_uuid[16], vpd_2_0_uuid[16], vpd_1_2_uuid[16];
   int expected_handle;
   int table_len;
@@ -629,8 +613,9 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   /* eps and eps_offset will be set slightly later. */
 
   if (eps_base == UNKNOWN_EPS_BASE) {
-    fprintf(stderr, "[ERROR] Cannot determine eps_base. Cannot go on.\n"
-                    "        Ensure you have a valid FMAP.\n");
+    fprintf(stderr,
+            "[ERROR] Cannot determine eps_base. Cannot go on.\n"
+            "        Ensure you have a valid FMAP.\n");
     retval = VPD_ERR_INVALID;
     goto teardown;
   }
@@ -650,7 +635,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   /* try to search the EPS if it is not aligned to the begin of partition. */
   for (index = 0; index < vpd_size; index += 16) {
     if (isEps(&vpd_buf[index])) {
-      eps = (struct vpd_entry *)&vpd_buf[index];
+      eps = (struct vpd_entry*)&vpd_buf[index];
       eps_offset = index;
       break;
     }
@@ -676,9 +661,8 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   /* EPS is done above. Parse structure tables below. */
   /* Get the first type 241 blob, at the tail of EPS. */
   header = (struct vpd_header*)(((uint8_t*)eps) + eps->entry_length);
-  data = (struct vpd_table_binary_blob_pointer *)
-         ((uint8_t *)header + sizeof(*header));
-
+  data = (struct vpd_table_binary_blob_pointer*)((uint8_t*)header +
+                                                 sizeof(*header));
 
   /* prepare data structure to compare */
   uuid_parse(GOOGLE_SPD_UUID, spd_uuid);
@@ -686,9 +670,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
   uuid_parse(GOOGLE_VPD_1_2_UUID, vpd_1_2_uuid);
 
   /* Iterate all tables */
-  for (expected_handle = 0;
-       header->type != VPD_TYPE_END;
-       ++expected_handle) {
+  for (expected_handle = 0; header->type != VPD_TYPE_END; ++expected_handle) {
     /* make sure we haven't have too much handle already. */
     if (expected_handle > 65535) {
       fprintf(stderr, "[ERROR] too many handles. Terminate parsing.\n");
@@ -698,18 +680,20 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
 
     /* check type */
     if (header->type != VPD_TYPE_BINARY_BLOB_POINTER) {
-      fprintf(stderr, "[ERROR] We now only support Binary Blob Pointer (241). "
-                      "But the %dth handle is type %d. Terminate parsing.\n",
-                      header->handle, header->type);
+      fprintf(stderr,
+              "[ERROR] We now only support Binary Blob Pointer (241). "
+              "But the %dth handle is type %d. Terminate parsing.\n",
+              header->handle, header->type);
       retval = VPD_ERR_INVALID;
       goto teardown;
     }
 
     /* make sure handle is increasing as expected */
     if (header->handle != expected_handle) {
-      fprintf(stderr, "[ERROR] The handle value must be %d, but is %d.\n"
-                      "        Use -O option to re-format.\n",
-                      expected_handle, header->handle);
+      fprintf(stderr,
+              "[ERROR] The handle value must be %d, but is %d.\n"
+              "        Use -O option to re-format.\n",
+              expected_handle, header->handle);
       retval = VPD_ERR_INVALID;
       goto teardown;
     }
@@ -717,9 +701,10 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
     /* point to the table 241 data part */
     index = data->offset - related_eps_base;
     if (index >= file_size) {
-      fprintf(stderr, "[ERROR] the table offset looks suspicious. "
-                      "index=0x%x, data->offset=0x%x, related_eps_base=0x%x\n",
-                      index, data->offset, related_eps_base);
+      fprintf(stderr,
+              "[ERROR] the table offset looks suspicious. "
+              "index=0x%x, data->offset=0x%x, related_eps_base=0x%x\n",
+              index, data->offset, related_eps_base);
       retval = VPD_ERR_INVALID;
       goto teardown;
     }
@@ -732,12 +717,12 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
       spd_offset = index;
       spd_len = data->size;
       if (vpd_offset + spd_offset + spd_len >= file_size) {
-        fprintf(stderr, "[ERROR] SPD offset in BBP is not correct.\n"
-                        "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%x\n"
-                        "        If this file is VPD partition only, try to\n"
-                        "        use -E to adjust offset values.\n",
-                        (uint32_t)vpd_offset, (uint32_t)spd_offset,
-                        spd_len, file_size);
+        fprintf(stderr,
+                "[ERROR] SPD offset in BBP is not correct.\n"
+                "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%x\n"
+                "        If this file is VPD partition only, try to\n"
+                "        use -E to adjust offset values.\n",
+                (uint32_t)vpd_offset, (uint32_t)spd_offset, spd_len, file_size);
         retval = VPD_ERR_INVALID;
         goto teardown;
       }
@@ -753,12 +738,10 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
     } else if (!memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
       /* VPD 2.0 */
       /* iterate all pairs */
-      for (;
-           vpd_buf[index] != VPD_TYPE_TERMINATOR &&
-           vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
+      for (; vpd_buf[index] != VPD_TYPE_TERMINATOR &&
+             vpd_buf[index] != VPD_TYPE_IMPLICIT_TERMINATOR;) {
         retval = decodeToContainer(container, vpd_size, vpd_buf, &index);
-        if (VPD_OK != retval)
-        {
+        if (VPD_OK != retval) {
           fprintf(stderr, "decodeToContainer() error.\n");
           goto teardown;
         }
@@ -776,21 +759,18 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
         uint8_t ssd_sn[0x10];
         uint8_t mem_sn[0x10];
         uint8_t wlan_mac[0x06];
-      } *v12 = (void*)&vpd_buf[index];
+      }* v12 = (void*)&vpd_buf[index];
       setString(container, (uint8_t*)"Product_SN",
                 extractString(v12->prod_sn, sizeof(v12->prod_sn)),
                 VPD_AS_LONG_AS);
       setString(container, (uint8_t*)"SKU",
                 extractString(v12->sku, sizeof(v12->sku)), VPD_AS_LONG_AS);
       setString(container, (uint8_t*)"UUID",
-                extractHex(v12->uuid, sizeof(v12->uuid)),
-                VPD_AS_LONG_AS);
+                extractHex(v12->uuid, sizeof(v12->uuid)), VPD_AS_LONG_AS);
       setString(container, (uint8_t*)"MotherBoard_SN",
-                extractString(v12->mb_sn, sizeof(v12->mb_sn)),
-                VPD_AS_LONG_AS);
+                extractString(v12->mb_sn, sizeof(v12->mb_sn)), VPD_AS_LONG_AS);
       setString(container, (uint8_t*)"IMEI",
-                extractString(v12->imei, sizeof(v12->imei)),
-                VPD_AS_LONG_AS);
+                extractString(v12->imei, sizeof(v12->imei)), VPD_AS_LONG_AS);
       setString(container, (uint8_t*)"SSD_SN",
                 extractString(v12->ssd_sn, sizeof(v12->ssd_sn)),
                 VPD_AS_LONG_AS);
@@ -804,7 +784,7 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
 
     } else {
       /* un-supported UUID */
-      char outstr[37];  /* 36-char + 1 null terminator */
+      char outstr[37]; /* 36-char + 1 null terminator */
 
       uuid_unparse(data->uuid, outstr);
       fprintf(stderr, "[ERROR] un-supported UUID: %s\n", outstr);
@@ -820,8 +800,8 @@ vpd_err_t loadFile(const char *filename, struct PairContainer *container,
     }
 
     header = (struct vpd_header*)((uint8_t*)header + table_len);
-    data = (struct vpd_table_binary_blob_pointer *)
-           ((uint8_t *)header + sizeof(*header));
+    data = (struct vpd_table_binary_blob_pointer*)((uint8_t*)header +
+                                                   sizeof(*header));
   }
 
 teardown:
@@ -830,16 +810,16 @@ teardown:
   return retval;
 }
 
-
-vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
-             int write_back_to_flash) {
-  FILE *fp;
+vpd_err_t saveFile(const struct PairContainer* container,
+                   const char* filename,
+                   int write_back_to_flash) {
+  FILE* fp;
 
   unsigned char eps[1024];
   memset(eps, 0xff, sizeof(eps));
 
   /* prepare info */
-  struct google_vpd_info *info = (struct google_vpd_info *)buf;
+  struct google_vpd_info* info = (struct google_vpd_info*)buf;
   buf_len = sizeof(*info);
   memset(info, 0, buf_len);
   memcpy(info->header.magic, VPD_INFO_MAGIC, sizeof(info->header.magic));
@@ -869,7 +849,7 @@ vpd_err_t saveFile(const struct PairContainer *container, const char *filename,
    *   1. EPS
    *   2. SPD
    *   3. VPD 2.0
-  */
+   */
   if (found_vpd) {
     /* We found VPD partition in -f file, which means file is existed.
      * Instead of truncating the whole file, open to write partial. */
@@ -921,7 +901,7 @@ teardown:
   return retval;
 }
 
-static void usage(const char *progname) {
+static void usage(const char* progname) {
   printf("Chrome OS VPD 2.0 utility --\n");
 #ifdef VPD_VERSION
   printf("%s\n", VPD_VERSION);
@@ -953,33 +933,32 @@ static void usage(const char *progname) {
   printf("\n");
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
-  const char *optstring = "hf:s:S:p:i:lOg:d:0";
+  const char* optstring = "hf:s:S:p:i:lOg:d:0";
   static struct option long_options[] = {
-    {"help", 0, 0, 'h'},
-    {"file", 0, 0, 'f'},
-    {"string", 0, 0, 's'},
-    {"base64file", 0, 0, 'S'},
-    {"pad", required_argument, 0, 'p'},
-    {"partition", 0, 0, 'i'},
-    {"list", 0, 0, 'l'},
-    {"overwrite", 0, 0, 'O'},
-    {"filter", 0, 0, 'g'},
-    {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
-    {"raw", 0, 0, 'R'},
-    {"null-terminated", 0, 0, '0'},
-    {"delete", 0, 0, 'd'},
-    {0, 0, 0, 0}
-  };
-  char *filename = NULL;
-  const char *load_file = NULL;
-  const char *save_file = NULL;
-  const char *tmp_part_file = NULL;
-  const char *tmp_full_file = NULL;
-  uint8_t *key_to_export = NULL;
+      {"help", 0, 0, 'h'},
+      {"file", 0, 0, 'f'},
+      {"string", 0, 0, 's'},
+      {"base64file", 0, 0, 'S'},
+      {"pad", required_argument, 0, 'p'},
+      {"partition", 0, 0, 'i'},
+      {"list", 0, 0, 'l'},
+      {"overwrite", 0, 0, 'O'},
+      {"filter", 0, 0, 'g'},
+      {"sh", 0, &export_type, VPD_EXPORT_AS_PARAMETER},
+      {"raw", 0, 0, 'R'},
+      {"null-terminated", 0, 0, '0'},
+      {"delete", 0, 0, 'd'},
+      {0, 0, 0, 0}};
+  char* filename = NULL;
+  const char* load_file = NULL;
+  const char* save_file = NULL;
+  const char* tmp_part_file = NULL;
+  const char* tmp_full_file = NULL;
+  uint8_t* key_to_export = NULL;
   int write_back_to_flash = 0;
   bool list_it = false;
   bool overwrite_it = false;
@@ -992,8 +971,8 @@ int main(int argc, char *argv[]) {
   initContainer(&set_argument);
   initContainer(&del_argument);
 
-  while ((opt = getopt_long(argc, argv, optstring,
-                            long_options, &option_index)) != EOF) {
+  while ((opt = getopt_long(argc, argv, optstring, long_options,
+                            &option_index)) != EOF) {
     switch (opt) {
       case 'h':
         usage(argv[0]);
@@ -1018,7 +997,7 @@ int main(int argc, char *argv[]) {
 
       case 'p':
         errno = 0;
-        pad_value_len = strtol(optarg, (char **) NULL, 0);
+        pad_value_len = strtol(optarg, (char**)NULL, 0);
 
         /* FIXME: this is not a stable way to detect error because
          *        implementation may (or may not) assign errno. */
@@ -1039,8 +1018,9 @@ int main(int argc, char *argv[]) {
 
       case 'O':
         overwrite_it = true;
-        modified = 1;  /* This option forces to write empty data back even
-                        * no new pair is given. */
+        /* This option forces to write empty data back even no new pair is
+         * given. */
+        modified = 1;
         break;
 
       case 'g':
@@ -1050,8 +1030,7 @@ int main(int argc, char *argv[]) {
       case 'd':
         /* Add key into container for delete. Since value is non-sense,
          * keep it empty. */
-        setString(&del_argument, (const uint8_t *)optarg,
-                                 (const uint8_t *)"", 0);
+        setString(&del_argument, (const uint8_t*)optarg, (const uint8_t*)"", 0);
         break;
 
       case '0':
@@ -1099,8 +1078,8 @@ int main(int argc, char *argv[]) {
     goto teardown;
   }
 
-  if (raw_input && (lenOfContainer(&set_argument) ||
-                    lenOfContainer(&del_argument))) {
+  if (raw_input &&
+      (lenOfContainer(&set_argument) || lenOfContainer(&del_argument))) {
     fprintf(stderr, "[ERROR] Changing in raw mode is not supported.\n");
     retval = VPD_ERR_SYNTAX;
     goto teardown;
@@ -1119,8 +1098,8 @@ int main(int argc, char *argv[]) {
 
   /* if no filename is specified, call flashrom to read from flash. */
   if (!filename) {
-    if (FLASHROM_OK != flashromPartialRead(tmp_part_file, tmp_full_file,
-                                           fmap_vpd_area_name)) {
+    if (FLASHROM_OK !=
+        flashromPartialRead(tmp_part_file, tmp_full_file, fmap_vpd_area_name)) {
       fprintf(stderr, "[WARN] flashromPartialRead() failed, try full read.\n");
       /* Try to read whole file */
       if (FLASHROM_OK != flashromFullRead(tmp_full_file)) {
@@ -1157,10 +1136,10 @@ int main(int argc, char *argv[]) {
 
   /* Do -d */
   num_to_delete = lenOfContainer(&del_argument);
-  if (subtractContainer(&file, &del_argument) !=
-      num_to_delete) {
-    fprintf(stderr, "[ERROR] At least one of the keys to delete"
-        " does not exist. Command ignored.\n");
+  if (subtractContainer(&file, &del_argument) != num_to_delete) {
+    fprintf(stderr,
+            "[ERROR] At least one of the keys to delete"
+            " does not exist. Command ignored.\n");
     retval = VPD_ERR_PARAM;
     goto teardown;
   } else if (num_to_delete > 0) {
@@ -1171,16 +1150,16 @@ int main(int argc, char *argv[]) {
   if (key_to_export) {
     struct StringPair* foundString = findString(&file, key_to_export, NULL);
     if (NULL == foundString) {
-        fprintf(stderr, "findString(): Vpd data '%s' was not found.\n",
-                key_to_export);
+      fprintf(stderr, "findString(): Vpd data '%s' was not found.\n",
+              key_to_export);
       retval = VPD_FAIL;
       goto teardown;
     } else {
       uint8_t dump_buf[BUF_LEN * 2];
       int dump_len = 0;
 
-      retval = exportStringValue(foundString,
-                                 sizeof(dump_buf), dump_buf, &dump_len);
+      retval =
+          exportStringValue(foundString, sizeof(dump_buf), dump_buf, &dump_len);
       if (VPD_OK != retval) {
         fprintf(stderr, "exportStringValue(): Cannot export the value.\n");
         goto teardown;
@@ -1197,8 +1176,8 @@ int main(int argc, char *argv[]) {
     uint8_t list_buf[BUF_LEN * 5 + 64];
     int list_len = 0;
 
-    retval = exportContainer(export_type, &file, sizeof(list_buf),
-                             list_buf, &list_len);
+    retval = exportContainer(export_type, &file, sizeof(list_buf), list_buf,
+                             &list_len);
     if (VPD_OK != retval) {
       fprintf(stderr, "exportContainer(): Cannot generate string.\n");
       goto teardown;
@@ -1206,8 +1185,7 @@ int main(int argc, char *argv[]) {
 
     /* Export necessary program parameters */
     if (VPD_EXPORT_AS_PARAMETER == export_type) {
-      printf("%s%s -i %s \\\n",
-             SH_COMMENT, argv[0], fmap_vpd_area_name);
+      printf("%s%s -i %s \\\n", SH_COMMENT, argv[0], fmap_vpd_area_name);
 
       if (filename)
         printf("    -f %s \\\n", filename);
@@ -1230,8 +1208,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (write_back_to_flash) {
-      if (FLASHROM_OK != flashromPartialWrite(save_file, tmp_full_file,
-                                              fmap_vpd_area_name)) {
+      if (FLASHROM_OK !=
+          flashromPartialWrite(save_file, tmp_full_file, fmap_vpd_area_name)) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
         retval = VPD_ERR_ROM_WRITE;
         goto teardown;
@@ -1240,9 +1218,12 @@ int main(int argc, char *argv[]) {
   }
 
 teardown:
-  if (spd_data) free(spd_data);
-  if (filename) free(filename);
-  if (key_to_export) free(key_to_export);
+  if (spd_data)
+    free(spd_data);
+  if (filename)
+    free(filename);
+  if (key_to_export)
+    free(key_to_export);
   destroyContainer(&file);
   destroyContainer(&set_argument);
   destroyContainer(&del_argument);
