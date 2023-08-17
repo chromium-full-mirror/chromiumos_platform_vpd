@@ -525,8 +525,8 @@ static uint8_t* extractHex(const uint8_t* value, const int len) {
         --out; /* remove the tailing colon */
       goto end_of_func;
     }
-    sprintf(tmp, "%02x:", value[in]);
-    memcpy(&buf[out], tmp, strlen(tmp));
+    snprintf(tmp, sizeof(tmp), "%02x:", value[in]);
+    memcpy(&buf[out], tmp, strnlen(tmp, sizeof(tmp)));
     out += strlen(tmp);
   }
 
