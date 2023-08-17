@@ -828,12 +828,12 @@ vpd_err_t saveFile(const struct PairContainer* container,
   vpd_err_t retval = encodeContainer(&file, max_buf_len, buf, &buf_len);
   if (VPD_OK != retval) {
     fprintf(stderr, "encodeContainer() error.\n");
-    goto teardown;
+    return retval;
   }
   retval = encodeVpdTerminator(max_buf_len, buf, &buf_len);
   if (VPD_OK != retval) {
     fprintf(stderr, "Out of space for terminator.\n");
-    goto teardown;
+    return retval;
   }
   info->size = buf_len - sizeof(*info);
 
@@ -841,7 +841,7 @@ vpd_err_t saveFile(const struct PairContainer* container,
   retval = buildEpsAndTables(buf_len, sizeof(eps), eps, &eps_len);
   if (VPD_OK != retval) {
     fprintf(stderr, "Cannot build EPS.\n");
-    goto teardown;
+    return retval;
   }
   assert(eps_len <= GOOGLE_SPD_OFFSET);
 
@@ -855,16 +855,14 @@ vpd_err_t saveFile(const struct PairContainer* container,
      * Instead of truncating the whole file, open to write partial. */
     if (!(fp = fopen(filename, "r+"))) {
       fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
-      retval = VPD_ERR_SYSTEM;
-      goto teardown;
+      return VPD_ERR_SYSTEM;
     }
   } else {
     /* VPD is not found, which means the file is pure VPD data.
      * Always creates the new file and overwrites the original content. */
     if (!(fp = fopen(filename, "w+"))) {
       fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
-      retval = VPD_ERR_SYSTEM;
-      goto teardown;
+      return VPD_ERR_SYSTEM;
     }
   }
 
@@ -874,8 +872,7 @@ vpd_err_t saveFile(const struct PairContainer* container,
   fseek(fp, file_seek + eps_offset, SEEK_SET);
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
-    retval = VPD_ERR_SYSTEM;
-    goto teardown;
+    return VPD_ERR_SYSTEM;
   }
 
   /* write SPD */
@@ -883,8 +880,7 @@ vpd_err_t saveFile(const struct PairContainer* container,
     fseek(fp, file_seek + spd_offset, SEEK_SET);
     if (fwrite(spd_data, spd_len, 1, fp) != 1) {
       fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
-      retval = VPD_ERR_SYSTEM;
-      goto teardown;
+      return VPD_ERR_SYSTEM;
     }
   }
 
@@ -892,13 +888,11 @@ vpd_err_t saveFile(const struct PairContainer* container,
   fseek(fp, file_seek + vpd_2_0_offset, SEEK_SET);
   if (fwrite(buf, buf_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(VPD 2.0) error (%s)\n", strerror(errno));
-    retval = VPD_ERR_SYSTEM;
-    goto teardown;
+    return VPD_ERR_SYSTEM;
   }
   fclose(fp);
 
-teardown:
-  return retval;
+  return VPD_OK;
 }
 
 static void usage(const char* progname) {
