@@ -1,0 +1,204 @@
+// Copyright 2023 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include <string>
+#include <vector>
+
+#include <base/files/file_util.h>
+#include <base/files/scoped_temp_dir.h>
+#include <base/logging.h>
+#include <gtest/gtest.h>
+
+#include "vpd/cache_file.h"
+
+namespace vpd {
+
+class CacheFileTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    base_dir_ = temp_dir_.GetPath();
+  }
+
+  base::ScopedTempDir temp_dir_;
+  base::FilePath base_dir_;
+};
+
+TEST_F(CacheFileTest, Exists) {
+  {
+    CacheFile cache(VpdRo, base_dir_);
+
+    ASSERT_FALSE(cache.Exists());
+    std::string data = "";
+    base::WriteFile(base_dir_.Append("ro.txt"), data);
+    ASSERT_TRUE(cache.Exists());
+  }
+  {
+    CacheFile cache(VpdRw, base_dir_);
+    ASSERT_FALSE(cache.Exists());
+    std::string data = "";
+    base::WriteFile(base_dir_.Append("rw.txt"), data);
+    ASSERT_TRUE(cache.Exists());
+  }
+}
+
+TEST_F(CacheFileTest, Read) {
+  struct expectation {
+    std::string contents;
+    std::vector<const KeyVal> kvs;
+    bool expect_success;
+  };
+  std::array<expectation, 5> expectations = {
+      (struct expectation){
+          .contents = "foo=\"bar\"\n",
+          .kvs =
+              {
+                  {
+                      .key = "foo",
+                      .value = "bar",
+                  },
+              },
+          .expect_success = true,
+      },
+      (struct expectation){
+          .contents = "foo=\"bar\"\nthis=\"has\"quotes\"\nthat=\"="
+                      "extraequals\"\nempty=\"\"\n",
+          .kvs =
+              {
+                  {
+                      .key = "foo",
+                      .value = "bar",
+                  },
+                  {
+                      .key = "this",
+                      .value = "has\"quotes",
+                  },
+                  {
+                      .key = "that",
+                      .value = "=extraequals",
+                  },
+                  {
+                      .key = "empty",
+                      .value = "",
+                  },
+              },
+          .expect_success = true,
+      },
+      (struct expectation){
+          .contents = "",
+          .kvs = {},
+          .expect_success = true,
+      },
+      (struct expectation){
+          .contents = "malformatted",
+          .expect_success = false,
+      },
+      (struct expectation){
+          .contents = "notenough=quotes\"",
+          .expect_success = false,
+      },
+  };
+
+  for (const auto& expect : expectations) {
+    CacheFile cache(VpdRo, base_dir_);
+
+    base::WriteFile(base_dir_.Append("ro.txt"), expect.contents);
+    std::vector<const KeyVal> result;
+    EXPECT_EQ(cache.Read(&result), expect.expect_success);
+    if (expect.expect_success) {
+      EXPECT_EQ(result, expect.kvs);
+    }
+  }
+}
+
+TEST_F(CacheFileTest, Write) {
+  struct expectation {
+    std::vector<const KeyVal> kvs;
+    std::string contents;
+  };
+  std::array<expectation, 3> expectations = {
+      (struct expectation){
+          .kvs =
+              {
+                  {
+                      .key = "foo",
+                      .value = "bar",
+                  },
+              },
+          .contents = "foo=\"bar\"\n",
+      },
+      (struct expectation){
+          .kvs =
+              {
+                  {
+                      .key = "foo",
+                      .value = "bar",
+                  },
+                  {
+                      .key = "this",
+                      .value = "has\"quotes",
+                  },
+                  {
+                      .key = "that",
+                      .value = "=extraequals",
+                  },
+                  {
+                      .key = "empty",
+                      .value = "",
+                  },
+              },
+          .contents = "foo=\"bar\"\nthis=\"has\"quotes\"\nthat=\"="
+                      "extraequals\"\nempty=\"\"\n",
+      },
+      (struct expectation){
+          .kvs = {},
+          .contents = "",
+      },
+  };
+
+  for (const auto& expect : expectations) {
+    CacheFile cache(VpdRo, base_dir_);
+
+    EXPECT_TRUE(cache.Write(expect.kvs));
+    std::string data;
+    ASSERT_TRUE(base::ReadFileToString(base_dir_.Append("ro.txt"), &data));
+    EXPECT_EQ(data, expect.contents);
+  }
+}
+
+TEST_F(CacheFileTest, Bidirectional) {
+  std::array<std::vector<const KeyVal>, 3> kvs = {
+      std::vector<const KeyVal>(),
+      {
+          {
+              .key = "foo",
+              .value = "bar",
+          },
+      },
+      {
+          {
+              .key = "extra",
+              .value = "quote\"s",
+          },
+          {
+              .key = "empty",
+              .value = "",
+          },
+          {
+              .key = "equals",
+              .value = "=some=val",
+          },
+      },
+  };
+
+  for (const auto& kv : kvs) {
+    CacheFile cache(VpdRw, base_dir_);
+    EXPECT_TRUE(cache.Write(kv));
+    std::vector<const KeyVal> result;
+    EXPECT_TRUE(cache.Read(&result));
+    EXPECT_EQ(kv, result);
+  }
+}
+
+}  // namespace vpd
