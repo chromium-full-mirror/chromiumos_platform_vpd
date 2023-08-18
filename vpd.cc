@@ -33,6 +33,8 @@ extern "C" {
 #include "lib/vpd_tables.h"
 };
 
+namespace {
+
 /* The buffer length. Right now the VPD partition size on flash is 128KB. */
 #define BUF_LEN (128 * 1024)
 
@@ -239,7 +241,7 @@ error_1:
   return retval;
 }
 
-static int isbase64(uint8_t c) {
+int isbase64(uint8_t c) {
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
 }
 
@@ -278,7 +280,7 @@ std::optional<std::vector<uint8_t>> read_string_from_file(
 /*
  * Check if given key name is compliant to recommended format.
  */
-static vpd_err_t checkKeyName(const uint8_t* name) {
+vpd_err_t checkKeyName(const uint8_t* name) {
   unsigned char c;
   while ((c = *name++)) {
     if (!(isalnum(c) || c == '_' || c == '.')) {
@@ -295,7 +297,7 @@ static vpd_err_t checkKeyName(const uint8_t* name) {
  * If key is "serial_number" or "mlb_serial_number", the value should only
  * contain characters a-z, A-Z, 0-9 or dash (-).
  */
-static vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
+vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
   int is_serial_number = 0;
   size_t value_len = 0;
   unsigned char c;
@@ -462,7 +464,7 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
  * Note that the returning pointer is a static buffer. Thus the later call will
  * destroy the former call's result.
  */
-static uint8_t* extractString(const uint8_t* value, const int max_len) {
+uint8_t* extractString(const uint8_t* value, const int max_len) {
   static uint8_t buf[128];
 
   /* not longer than the buffer size */
@@ -473,7 +475,7 @@ static uint8_t* extractString(const uint8_t* value, const int max_len) {
   return buf;
 }
 
-static uint8_t* extractHex(const uint8_t* value, const int len) {
+uint8_t* extractHex(const uint8_t* value, const int len) {
   char tmp[4]; /* for a hex string */
   static uint8_t buf[128];
   int in, out; /* in points to value[], while out points to buf[]. */
@@ -841,7 +843,7 @@ vpd_err_t saveFile(const struct PairContainer* container,
   return VPD_OK;
 }
 
-static void usage(const char* progname) {
+void usage(const char* progname) {
   printf("Chrome OS VPD 2.0 utility --\n");
 #ifdef VPD_VERSION
   printf("%s\n", VPD_VERSION);
@@ -872,6 +874,8 @@ static void usage(const char* progname) {
   printf("      -g and -l must be mutually exclusive.\n");
   printf("\n");
 }
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
   int opt;
