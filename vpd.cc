@@ -72,8 +72,6 @@ struct PairContainer file;
 struct PairContainer set_argument;
 struct PairContainer del_argument;
 
-int export_type = VPD_EXPORT_KEY_VALUE;
-
 /* The current padding length value.
  * Default: VPD_AS_LONG_AS
  */
@@ -882,6 +880,7 @@ int main(int argc, char* argv[]) {
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
+  int export_type = VPD_EXPORT_KEY_VALUE;
   const char* optstring = "hf:s:S:p:i:lOg:d:0";
   static struct option long_options[] = {
       {"help", 0, 0, 'h'},
