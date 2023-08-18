@@ -5,6 +5,7 @@
  */
 
 #include <optional>
+#include <string>
 
 #include <assert.h>
 #include <ctype.h>
@@ -90,9 +91,6 @@ int max_buf_len = sizeof(buf);
  */
 #define UNKNOWN_EPS_BASE ((uint32_t)-1)
 uint32_t eps_base = UNKNOWN_EPS_BASE;
-
-/* the fmap name of VPD. */
-char fmap_vpd_area_name[FMAP_STRLEN] = "RO_VPD";
 
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFlie(). */
@@ -407,6 +405,7 @@ int isEps(const void* ptr) {
  * If found, vpd_offset and vpd_size are updated.
  */
 vpd_err_t findVpdPartition(const std::vector<uint8_t>& read_buf,
+                           const std::string& region_name,
                            uint32_t* vpd_offset,
                            uint32_t* vpd_size) {
   assert(vpd_offset);
@@ -426,10 +425,9 @@ vpd_err_t findVpdPartition(const std::vector<uint8_t>& read_buf,
   /* FMAP signature is found, try to search the partition name in table. */
   fmap = (const struct fmap*)(read_buf.data() + sig_offset);
 
-  const struct fmap_area* area = fmap_find_area(fmap, fmap_vpd_area_name);
+  const struct fmap_area* area = fmap_find_area(fmap, region_name.c_str());
   if (!area) {
-    LOG(ERROR) << "The VPD partition [" << fmap_vpd_area_name
-               << "] is not found.";
+    LOG(ERROR) << "The VPD partition [" << region_name << "] is not found.";
     return VPD_ERR_NOT_FOUND;
   }
   *vpd_offset = area->offset;
@@ -440,7 +438,9 @@ vpd_err_t findVpdPartition(const std::vector<uint8_t>& read_buf,
   return VPD_OK;
 }
 
-vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
+vpd_err_t getVpdPartitionFromFullBios(const std::string& region_name,
+                                      uint32_t* offset,
+                                      uint32_t* size) {
   const char* filename = myMkTemp();
   if (!filename) {
     return VPD_ERR_SYSTEM;
@@ -452,7 +452,7 @@ vpd_err_t getVpdPartitionFromFullBios(uint32_t* offset, uint32_t* size) {
   }
   auto buf = base::ReadFileToBytes(base::FilePath(filename));
   assert(buf);
-  if (findVpdPartition(*buf, offset, size)) {
+  if (findVpdPartition(*buf, region_name, offset, size)) {
     fprintf(stderr, "[WARN] Cannot get eps_base from full BIOS.\n");
     return VPD_ERR_INVALID;
   }
@@ -524,7 +524,8 @@ vpd_err_t loadRawFile(const char* filename, struct PairContainer* container) {
   return VPD_OK;
 }
 
-vpd_err_t loadFile(const char* filename,
+vpd_err_t loadFile(const std::string& region_name,
+                   const char* filename,
                    struct PairContainer* container,
                    bool overwrite_it) {
   struct vpd_entry* eps;
@@ -543,13 +544,13 @@ vpd_err_t loadFile(const char* filename,
     return VPD_OK;
   }
 
-  if (0 == findVpdPartition(*read_buf, &vpd_offset, &vpd_size)) {
+  if (0 == findVpdPartition(*read_buf, region_name, &vpd_offset, &vpd_size)) {
     eps_base = vpd_offset;
   } else {
     /* We cannot parse out the VPD partition address from given file.
      * Then, try to read the whole BIOS chip. */
     uint32_t offset, size;
-    retval = getVpdPartitionFromFullBios(&offset, &size);
+    retval = getVpdPartitionFromFullBios(region_name, &offset, &size);
     if (VPD_OK == retval) {
       eps_base = offset;
       vpd_size = size;
@@ -897,6 +898,7 @@ int main(int argc, char* argv[]) {
       {"null-terminated", 0, 0, '0'},
       {"delete", 0, 0, 'd'},
       {0, 0, 0, 0}};
+  std::string region_name = "RO_VPD";
   char* filename = NULL;
   const char* load_file = NULL;
   const char* save_file = NULL;
@@ -954,7 +956,12 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'i':
-        snprintf(fmap_vpd_area_name, sizeof(fmap_vpd_area_name), "%s", optarg);
+        region_name = std::string(optarg);
+        if (region_name != "RO_VPD" && region_name != "RW_VPD") {
+          LOG(ERROR) << "Invalid VPD partition name: " << region_name;
+          retval = VPD_ERR_SYNTAX;
+          goto teardown;
+        }
         break;
 
       case 'l':
@@ -1040,16 +1047,14 @@ int main(int argc, char* argv[]) {
 
   /* if no filename is specified, call flashrom to read from flash. */
   if (!filename) {
-    if (FLASHROM_OK !=
-        flashromPartialRead(tmp_part_file, tmp_full_file, fmap_vpd_area_name)) {
+    if (FLASHROM_OK != flashromPartialRead(tmp_part_file, tmp_full_file,
+                                           region_name.c_str())) {
       fprintf(stderr, "[WARN] flashromPartialRead() failed, try full read.\n");
       /* Try to read whole file */
       if (FLASHROM_OK != flashromFullRead(tmp_full_file)) {
         fprintf(stderr, "[ERROR] flashromFullRead() error!\n");
         retval = VPD_ERR_ROM_READ;
         goto teardown;
-      } else {
-        /* Success! Then the fmap_vpd_area_name is changed for later use. */
       }
     }
 
@@ -1064,7 +1069,7 @@ int main(int argc, char* argv[]) {
   if (raw_input)
     retval = loadRawFile(load_file, &file);
   else
-    retval = loadFile(load_file, &file, overwrite_it);
+    retval = loadFile(region_name, load_file, &file, overwrite_it);
   if (VPD_OK != retval) {
     fprintf(stderr, "loadFile('%s') error.\n", load_file);
     goto teardown;
@@ -1127,7 +1132,7 @@ int main(int argc, char* argv[]) {
 
     /* Export necessary program parameters */
     if (VPD_EXPORT_AS_PARAMETER == export_type) {
-      printf("%s%s -i %s \\\n", SH_COMMENT, argv[0], fmap_vpd_area_name);
+      printf("%s%s -i %s \\\n", SH_COMMENT, argv[0], region_name.c_str());
 
       if (filename)
         printf("    -f %s \\\n", filename);
@@ -1151,7 +1156,7 @@ int main(int argc, char* argv[]) {
 
     if (write_back_to_flash) {
       if (FLASHROM_OK !=
-          flashromPartialWrite(save_file, tmp_full_file, fmap_vpd_area_name)) {
+          flashromPartialWrite(save_file, tmp_full_file, region_name.c_str())) {
         fprintf(stderr, "flashromPartialWrite() error.\n");
         retval = VPD_ERR_ROM_WRITE;
         goto teardown;
