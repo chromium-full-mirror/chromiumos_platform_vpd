@@ -904,7 +904,7 @@ int main(int argc, char* argv[]) {
   const char* save_file = NULL;
   const char* tmp_part_file = NULL;
   const char* tmp_full_file = NULL;
-  uint8_t* key_to_export = NULL;
+  std::optional<std::string> key_to_export;
   int write_back_to_flash = 0;
   bool list_it = false;
   bool overwrite_it = false;
@@ -976,7 +976,7 @@ int main(int argc, char* argv[]) {
         break;
 
       case 'g':
-        key_to_export = reinterpret_cast<uint8_t*>(strdup(optarg));
+        key_to_export = std::string(optarg);
         break;
 
       case 'd':
@@ -1095,10 +1095,11 @@ int main(int argc, char* argv[]) {
 
   /* Do -g */
   if (key_to_export) {
-    struct StringPair* foundString = findString(&file, key_to_export, NULL);
-    if (NULL == foundString) {
+    struct StringPair* foundString = findString(
+        &file, reinterpret_cast<const uint8_t*>(key_to_export->c_str()), NULL);
+    if (!foundString) {
       fprintf(stderr, "findString(): Vpd data '%s' was not found.\n",
-              key_to_export);
+              key_to_export->c_str());
       retval = VPD_FAIL;
       goto teardown;
     } else {
@@ -1169,8 +1170,6 @@ teardown:
     free(spd_data);
   if (filename)
     free(filename);
-  if (key_to_export)
-    free(key_to_export);
   destroyContainer(&file);
   destroyContainer(&set_argument);
   destroyContainer(&del_argument);
