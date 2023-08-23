@@ -85,11 +85,11 @@ atomic_move() {
 }
 
 flash_partial() {
-  flashrom -p host -i FMAP -i RO_VPD -i RW_VPD -r "$@"
+  flashrom -p internal -i FMAP -i RO_VPD -i RW_VPD -r "$@"
 }
 
 flash_whole() {
-  flashrom -p host -r "$@"
+  flashrom -p internal -r "$@"
 }
 
 # Check if the cache file is valid and remove it if not.
