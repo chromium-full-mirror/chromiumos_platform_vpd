@@ -54,6 +54,7 @@ executable("vpd") {
     "include/lib",
   ]
   install_path = "sbin"
+  deps = [ ":libvpd" ]
 }
 
 config("vpd_c") {
