@@ -23,13 +23,6 @@ class BRILLO_EXPORT Encoder {
     uint32_t partition_offset = 0;
     // All offsets are offsets within the flash partition.
     uint32_t eps_offset = 0;
-    // NB: It's not clear SPD fields are truly needed. In prior
-    // implementations, these are left at default values (and an empty SPD
-    // buffer) if there wasn't preexisting SPD. It's technically possible that
-    // some old device (or something programmed with another tool) has
-    // something in here.
-    uint32_t spd_offset = GOOGLE_SPD_OFFSET;
-    std::optional<std::vector<uint8_t>> spd;
   };
 
   static std::optional<std::vector<uint8_t>> Encode(
@@ -39,8 +32,6 @@ class BRILLO_EXPORT Encoder {
   struct DecodedParams {
     // All offsets are offsets within the flash partition.
     uint32_t eps_offset = 0;
-    uint32_t spd_offset = GOOGLE_SPD_OFFSET;
-    std::optional<std::vector<uint8_t>> spd;
   };
 
   static std::optional<std::map<std::string, std::string>> Decode(

@@ -35,8 +35,6 @@ constexpr unsigned int kMaxBlobSize = 1024 * 1024 * 1024;
 
 // We only look for EPS headers at this alignment.
 constexpr unsigned int kEpsOffsetStride = 16;
-// spd_len - Max length for DDR3. Old code used a default 256 if not specified.
-constexpr unsigned int kDefaultSpdSize = 256;
 
 enum {
   VPD_TYPE_TERMINATOR = 0,
@@ -275,13 +273,6 @@ std::vector<uint8_t> GenerateEpsAndTables(const Encoder::EncodingParams& params,
   uint32_t eps_base = params.partition_offset;
   int num_structures = 0;
 
-  // Generate type 241 - SPD data.
-  auto spd = VpdType241(num_structures++, GOOGLE_SPD_UUID, GOOGLE_SPD_VENDOR,
-                        GOOGLE_SPD_DESCRIPTION, GOOGLE_SPD_VARIANT,
-                        eps_base + params.spd_offset,
-                        params.spd ? params.spd->size()
-                                   : kDefaultSpdSize /* Max length for DDR3 */);
-
   // TODO(hungte) Once most systems have been updated to support VPD_TYPE_INFO
   // record, we can remove the +sizeof(google_vpd_info) hack.
 
@@ -295,7 +286,7 @@ std::vector<uint8_t> GenerateEpsAndTables(const Encoder::EncodingParams& params,
   // Generate type 127.
   auto type127 = VpdType127(num_structures++);
 
-  for (const auto& v : std::array{spd, vpd, type127}) {
+  for (const auto& v : std::array{vpd, type127}) {
     ret.insert(ret.end(), v.begin(), v.end());
   }
 
@@ -447,16 +438,6 @@ std::optional<std::vector<uint8_t>> Encoder::Encode(
   data.resize(params.eps_offset, 0xff);
   data.insert(data.end(), eps.begin(), eps.end());
 
-  if (params.spd) {
-    if (data.size() > params.spd_offset) {
-      LOG(ERROR) << "EPS and SPD overlap: " << data.size() << " vs. "
-                 << params.spd_offset;
-      return {};
-    }
-    data.resize(params.spd_offset, 0xff);
-    data.insert(data.end(), params.spd->begin(), params.spd->end());
-  }
-
   // NB: old implementations pretended this was configurable, but always used a
   // fixed constant.
   const uint32_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET;
@@ -581,15 +562,7 @@ std::optional<std::map<std::string, std::string>> Encoder::Decode(
     }
 
     if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
-      uint32_t spd_len = data->size;
-      if (spd_len > eps.size() - offs) {
-        LOG(ERROR) << "SPD overflows the buffer";
-        return {};
-      }
-
-      params->spd = std::vector<uint8_t>(eps.begin() + offs,
-                                         eps.begin() + offs + spd_len);
-      params->spd_offset = offs + params->eps_offset;
+      VLOG(1) << "Ignoring SPD";
     } else if (!memcmp(data->uuid, vpd_1_2_uuid, sizeof(data->uuid))) {
       LOG(ERROR) << "VPD 1.2 not supported";
       return {};

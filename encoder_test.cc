@@ -330,12 +330,6 @@ TEST_F(EncoderTest, BidirectionlParams) {
           .partition_offset = 0x12300,
           .eps_offset = 0x100,
       },
-      Encoder::EncodingParams{
-          .partition_offset = 0x12300,
-          .eps_offset = 0x100,
-          .spd_offset = 0x417,
-          .spd = std::vector<uint8_t>({1, 2, 3}),
-      },
   };
 
   for (const auto& param : params) {
@@ -361,10 +355,6 @@ TEST_F(EncoderTest, BidirectionlParams) {
         (*dict)["a"]);
 
     EXPECT_EQ(decoded_params.eps_offset, param.eps_offset);
-    if (param.spd) {
-      EXPECT_EQ(decoded_params.spd_offset, param.spd_offset);
-      EXPECT_EQ(decoded_params.spd, param.spd);
-    }
   }
 }
 

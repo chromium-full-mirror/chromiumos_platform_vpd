@@ -24,10 +24,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         .partition_offset = 0,
         .eps_offset = params.eps_offset,
     };
-    if (params.spd) {
-      encoding_params.spd = params.spd;
-      encoding_params.spd_offset = params.spd_offset;
-    }
     // Don't assume this will succeed, as we might be a bit stricter on
     // encoding inputs. Just fuzz that we don't do Real Bad Things.
     Encoder::Encode(encoding_params, *dict);
