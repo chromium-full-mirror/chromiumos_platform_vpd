@@ -72,11 +72,6 @@ struct PairContainer file;
 struct PairContainer set_argument;
 struct PairContainer del_argument;
 
-/* The current padding length value.
- * Default: VPD_AS_LONG_AS
- */
-int pad_value_len = VPD_AS_LONG_AS;
-
 /* The output buffer */
 uint8_t buf[BUF_LEN];
 int buf_len = 0;
@@ -377,7 +372,7 @@ vpd_err_t parseString(const uint8_t* string, bool read_from_file) {
 
   retval = checkKeyValuePair(key, value);
   if (retval == VPD_OK)
-    setString(&set_argument, key, value, pad_value_len);
+    setString(&set_argument, key, value, VPD_AS_LONG_AS);
 
   free(key);
 
@@ -856,7 +851,6 @@ void usage(const char* progname) {
   printf("      -S <key=file>    To add/change a string value, reading its\n");
   printf("                       base64 contents from a file.\n");
   printf("      -s <key=value>   To add/change a string value.\n");
-  printf("      -p <pad length>  Pad if length is shorter.\n");
   printf("      -i <partition>   Specify VPD partition name in fmap.\n");
   printf("      -l               List content in the file.\n");
   printf("      --sh             Dump content for shell script.\n");
@@ -881,13 +875,12 @@ int main(int argc, char* argv[]) {
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
   int export_type = VPD_EXPORT_KEY_VALUE;
-  const char* optstring = "hf:s:S:p:i:lOg:d:0";
+  const char* optstring = "hf:s:S:i:lOg:d:0";
   static struct option long_options[] = {
       {"help", 0, 0, 'h'},
       {"file", 0, 0, 'f'},
       {"string", 0, 0, 's'},
       {"base64file", 0, 0, 'S'},
-      {"pad", required_argument, 0, 'p'},
       {"partition", 0, 0, 'i'},
       {"list", 0, 0, 'l'},
       {"overwrite", 0, 0, 'O'},
@@ -939,19 +932,6 @@ int main(int argc, char* argv[]) {
           goto teardown;
         }
         read_from_file = false;
-        break;
-
-      case 'p':
-        errno = 0;
-        pad_value_len = strtol(optarg, NULL, 0);
-
-        /* FIXME: this is not a stable way to detect error because
-         *        implementation may (or may not) assign errno. */
-        if (!pad_value_len && errno == EINVAL) {
-          fprintf(stderr, "Not a number for pad length: %s\n", optarg);
-          retval = VPD_ERR_SYNTAX;
-          goto teardown;
-        }
         break;
 
       case 'i':

@@ -321,8 +321,7 @@ static vpd_err_t _exportStringPairAsParameter(const struct StringPair *str,
   int retval;
 
   {
-    char extra_params[32];
-    snprintf(extra_params, sizeof(extra_params), "    -p %d -s ", str->pad_len);
+    const char extra_params[] = "    -s ";
     retval = _appendToBuf(extra_params, strlen(extra_params),
                           max_buf_len, buf, generated);
     if (VPD_OK != retval) return retval;

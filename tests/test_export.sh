@@ -65,10 +65,10 @@ test_image() {
   args="-f ${BIOS}"
   args="${args} -s 'a=aaa'"
   args="${args} -s $'b=b\\'b\\nb'"
-  args="${args} -p 2 -s 'c=ccc'"
-  args="${args} -p 9 -s 'd=ddd'"
-  args="${args} -p 0 -s 'e=eee'"
-  args="${args} -p 20 -s 'f=double\"quote'"
+  args="${args} -s 'c=cc'"
+  args="${args} -s 'd=ddd'"
+  args="${args} -s 'e='"
+  args="${args} -s 'f=double\"quote'"
   args="${args} -s $'g=\\'\\'\\'\\''"
   args="${args} -l --sh"
   RUN "${VPD_OK}" "${BINARY} ${args} > ${TMP_DIR}/import.sh"
@@ -85,7 +85,7 @@ test_image() {
   # export to null-terminated format
   for arg_name in "--null-terminated" "-0"; do
     RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -O"
-    args="-f ${BIOS} -s a=aaa -p 1 -s b=bbb -p 10 -s c=ccc -l ${arg_name}"
+    args="-f ${BIOS} -s a=aaa -s b=b -s c=ccc -l ${arg_name}"
     local expect_result='613d61616100623d6200633d63636300'
     RUN "${VPD_OK}" "${BINARY} ${args} | xxd -ps" "${expect_result}"
   done

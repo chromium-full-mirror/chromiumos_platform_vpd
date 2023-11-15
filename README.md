@@ -114,17 +114,11 @@ the comment line preceding the example:
   # Add a new key-value pair, which value is a string (-s)
   % vpd -f vpd.bin -s "SKU"="0123456789ABCDEF"
 
-  # Assign padding length in value field. -p must be in front of the -s
-  # you want to take effected on.
-  % vpd -f vpd.bin -p 16 -s "SKU"="0123"
-  # In this case, the value of SKU is 16-byte long, which contains 12
-  # \0 at tail.
-
   # Add tons of key-value pairs at one time.
-  % vpd -f vpd.bin -p 32 -s "serial_number"="20101214_MARIO_1122" \
-                   -p 16 -s "ethernet_mac"="11:22:33:44:55:66" \
-                         -s "mlb_serial_number"="2037291738734" \
-                   -p 8  -s "UUID"="2323-3524-2344364-133456" \
+  % vpd -f vpd.bin -s "serial_number"="20101214_MARIO_1122" \
+                   -s "ethernet_mac"="11:22:33:44:55:66" \
+                   -s "mlb_serial_number"="2037291738734" \
+                   -s "UUID"="2323-3524-2344364-133456" \
                    ...
 
   # By default, utility accesses "RO_VPD" on flash. You can specify -i
@@ -211,4 +205,3 @@ type, it should assume no more pairs are present after this byte.
 | 0.3     | 2010/12/14 | Added the implicit terminator (0xFF)                  |
 | 0.2     | 2010/12/08 | Added type field. Allowed padding.                    |
 | 0.1     | 2010/09/14 | Draft version.                                        |
-
