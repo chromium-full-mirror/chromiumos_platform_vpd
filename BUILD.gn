@@ -9,6 +9,7 @@ group("all") {
     ":install_libvpd_headers",
     ":install_tmpfiles_conf",
     ":libvpd",
+    ":update_rw_vpd",
     ":vpd",
   ]
   if (!use.cros_host) {
@@ -28,6 +29,13 @@ group("all") {
       ":vpd_raw_decoder_fuzzer",
     ]
   }
+}
+
+executable("update_rw_vpd") {
+  sources = [ "util/update_rw_vpd.cc" ]
+  configs += [ ":target_defaults" ]
+  install_path = "sbin"
+  deps = [ ":libvpd" ]
 }
 
 executable("vpd") {
@@ -62,7 +70,6 @@ install_config("install_init") {
 install_config("install_sbin_scripts") {
   sources = [
     "util/dump_vpd_log",
-    "util/update_rw_vpd",
     "util/vpd_get_value",
     "util/vpd_icc",
   ]
@@ -125,6 +132,7 @@ if (use.test) {
       "flashrom_test.cc",
       "integration_test.cc",
       "sysfs_test.cc",
+      "util/update_rw_vpd_test.cc",
     ]
     configs += [
       "//common-mk:test",
