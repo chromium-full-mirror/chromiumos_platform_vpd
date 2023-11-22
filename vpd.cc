@@ -55,7 +55,6 @@ struct TempfileNode {
 }* tempfile_list = NULL;
 
 enum FileFlag {
-  HAS_SPD = (1 << 0),
   HAS_VPD_2_0 = (1 << 1),
   HAS_VPD_1_2 = (1 << 2),
   /* TODO(yjlou): refine those variables in main() to here:
@@ -80,7 +79,7 @@ int max_buf_len = sizeof(buf);
 /* The EPS base address used to fill the EPS table entry.
  * If the VPD partition can be found in fmap, this points to the starting
  * offset of VPD partition. If not found, this is used to be the base address
- * to increase SPD and VPD 2.0 offset fields.
+ * to increase VPD 2.0 offset fields.
  */
 #define UNKNOWN_EPS_BASE ((uint32_t)-1)
 uint32_t eps_base = UNKNOWN_EPS_BASE;
@@ -93,7 +92,6 @@ bool found_vpd = false;
  *
  *   SMBIOS EPS
  *   SMBIOS tables[]
- *   SPD
  *   VPD 2.0 data
  *
  */
@@ -101,14 +99,7 @@ uint32_t vpd_offset = 0, vpd_size; /* The whole partition */
 /* Below offset are related to vpd_offset and assume positive.
  * Those are used in saveFile() to write back data. */
 uint32_t eps_offset = 0; /* EPS's starting address. Tables[] is following. */
-uint32_t spd_offset = GOOGLE_SPD_OFFSET;      /* SPD address .*/
 off_t vpd_2_0_offset = GOOGLE_VPD_2_0_OFFSET; /* VPD 2.0 data address. */
-
-/* This points to the SPD data if it is availiable when loadFile().
- * The memory is allocated in loadFile(), will be used in saveFile(),
- * and freed at end of main(). */
-uint8_t* spd_data = NULL;
-int32_t spd_len = 256; /* max value for DDR3 */
 
 /* Creates a temporary file and return the filename, or NULL for any failure.
  */
@@ -167,17 +158,6 @@ vpd_err_t buildEpsAndTables(const int size_blob,
 
   buf += *generated;
 
-  /* Generate type 241 - SPD data */
-  table_len = vpd_append_type241(
-      0, &table, table_len, GOOGLE_SPD_UUID, eps_base + GOOGLE_SPD_OFFSET,
-      spd_len, /* Max length for DDR3 */
-      GOOGLE_SPD_VENDOR, GOOGLE_SPD_DESCRIPTION, GOOGLE_SPD_VARIANT);
-  if (table_len < 0) {
-    retval = VPD_FAIL;
-    goto error_1;
-  }
-  num_structures++;
-
   /*
    * TODO(hungte) Once most systems have been updated to support VPD_INFO
    * record, we can remove the +sizeof(google_vpd_info) hack.
@@ -185,7 +165,7 @@ vpd_err_t buildEpsAndTables(const int size_blob,
 
   /* Generate type 241 - VPD 2.0 */
   table_len = vpd_append_type241(
-      1, &table, table_len, GOOGLE_VPD_2_0_UUID,
+      num_structures, &table, table_len, GOOGLE_VPD_2_0_UUID,
       (eps_base + GOOGLE_VPD_2_0_OFFSET + sizeof(struct google_vpd_info)),
       size_blob, GOOGLE_VPD_2_0_VENDOR, GOOGLE_VPD_2_0_DESCRIPTION,
       GOOGLE_VPD_2_0_VARIANT);
@@ -196,7 +176,7 @@ vpd_err_t buildEpsAndTables(const int size_blob,
   num_structures++;
 
   /* Generate type 127 */
-  table_len = vpd_append_type127(2, &table, table_len);
+  table_len = vpd_append_type127(num_structures, &table, table_len);
   if (table_len < 0) {
     retval = VPD_FAIL;
     goto error_1;
@@ -660,27 +640,7 @@ vpd_err_t loadFile(const std::string& region_name,
      * The main switch case
      */
     if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
-      /* SPD */
-      spd_offset = index;
-      spd_len = data->size;
-      if (vpd_offset + spd_offset + spd_len >= read_buf->size()) {
-        fprintf(stderr,
-                "[ERROR] SPD offset in BBP is not correct.\n"
-                "        vpd=0x%x spd=0x%x len=0x%x file_size=0x%zx\n"
-                "        If this file is VPD partition only, try to\n"
-                "        use -E to adjust offset values.\n",
-                (uint32_t)vpd_offset, (uint32_t)spd_offset, spd_len,
-                read_buf->size());
-        return VPD_ERR_INVALID;
-      }
-
-      if (!(spd_data = reinterpret_cast<uint8_t*>(malloc(spd_len)))) {
-        fprintf(stderr, "spd_data: malloc(%d bytes) failed.\n", spd_len);
-        return VPD_ERR_SYSTEM;
-      }
-      memcpy(spd_data, read_buf->data() + vpd_offset + spd_offset, spd_len);
-      file_flag |= HAS_SPD;
-
+      // Ignoring SPD. This is legacy support, which was never properly used.
     } else if (!memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
       /* VPD 2.0 */
       /* iterate all pairs */
@@ -785,12 +745,11 @@ vpd_err_t saveFile(const struct PairContainer* container,
     fprintf(stderr, "Cannot build EPS.\n");
     return retval;
   }
-  assert(eps_len <= GOOGLE_SPD_OFFSET);
+  assert(eps_len <= GOOGLE_VPD_2_0_OFFSET);
 
   /* Write data in the following order:
    *   1. EPS
-   *   2. SPD
-   *   3. VPD 2.0
+   *   2. VPD 2.0
    */
   if (found_vpd) {
     /* We found VPD partition in -f file, which means file is existed.
@@ -815,15 +774,6 @@ vpd_err_t saveFile(const struct PairContainer* container,
   if (fwrite(eps, eps_len, 1, fp) != 1) {
     fprintf(stderr, "fwrite(EPS) error (%s)\n", strerror(errno));
     return VPD_ERR_SYSTEM;
-  }
-
-  /* write SPD */
-  if (spd_data) {
-    fseek(fp, file_seek + spd_offset, SEEK_SET);
-    if (fwrite(spd_data, spd_len, 1, fp) != 1) {
-      fprintf(stderr, "fwrite(SPD) error (%s)\n", strerror(errno));
-      return VPD_ERR_SYSTEM;
-    }
   }
 
   /* write VPD 2.0 */
@@ -1145,8 +1095,6 @@ int main(int argc, char* argv[]) {
   }
 
 teardown:
-  if (spd_data)
-    free(spd_data);
   if (filename)
     free(filename);
   destroyContainer(&file);
