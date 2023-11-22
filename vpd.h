@@ -21,6 +21,8 @@ class VpdProviderInterface;
 class BRILLO_EXPORT Vpd {
  public:
   Vpd();
+  // For tests, to provide a fake.
+  explicit Vpd(std::unique_ptr<VpdProviderInterface> provider);
   ~Vpd();
 
   // Read a single key VPD value from a VPD region.

@@ -5,6 +5,7 @@
 #include "vpd/vpd.h"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -15,6 +16,9 @@
 namespace vpd {
 
 Vpd::Vpd() : provider_(std::make_unique<Cache>()) {}
+
+Vpd::Vpd(std::unique_ptr<VpdProviderInterface> provider)
+    : provider_(std::move(provider)) {}
 
 Vpd::~Vpd() = default;
 

@@ -72,6 +72,7 @@ install_config("install_sbin_scripts") {
 
 install_config("install_libvpd_headers") {
   sources = [
+    "fake_vpd.h",
     "types.h",
     "vpd.h",
   ]
