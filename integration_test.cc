@@ -34,8 +34,7 @@ TEST_F(IntegrationTest, Broken) {
   auto blob = flashrom.Read(VpdRo);
   ASSERT_NE(std::nullopt, blob);
 
-  Encoder::DecodedParams params;
-  auto dict = Encoder::Decode(*blob, &params);
+  auto dict = Encoder::Decode(*blob);
   EXPECT_EQ(std::nullopt, dict);
 }
 

@@ -87,20 +87,7 @@ bool Cache::WriteBack(VpdRegion region) {
     return false;
   }
 
-  uint32_t partition_offset, partition_len;
-  if (!flashrom_.GetPartitionDimensions(region, &partition_offset,
-                                        &partition_len)) {
-    LOG(ERROR) << "Failed to determine partition dimensions";
-    return false;
-  }
-
-  VLOG(1) << "region params: " << partition_offset << " / " << partition_len;
-
-  const auto& blob = Encoder::Encode(
-      Encoder::EncodingParams{
-          .partition_offset = partition_offset,
-      },
-      cache_[region]);
+  const auto& blob = Encoder::Encode(cache_[region]);
   if (!blob) {
     LOG(ERROR) << "failed to encode VPD blob";
     return false;
