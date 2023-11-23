@@ -33,6 +33,7 @@ extern "C" {
 #include "lib/vpd_tables.h"
 };
 
+#include "vpd/cache.h"
 #include "vpd/encoder.h"
 #include "vpd/flashrom.h"
 
@@ -399,6 +400,9 @@ void usage(const char* progname) {
   printf("      -O               Overwrite and re-format VPD partition.\n");
   printf("      -g <key>         Print value string only.\n");
   printf("      -d <key>         Delete a key.\n");
+  printf("      --no-cache       Do not use the VPD cache; access the flash\n");
+  printf("                       directly. Only applies to non-filebacked\n");
+  printf("                       operations.\n");
   printf("\n");
   printf("   Notes:\n");
   printf("      You can specify multiple -s and -d. However, vpd always\n");
@@ -410,8 +414,6 @@ void usage(const char* progname) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  // TODO(b/288327526): plumb libvpd's cache by default, with a new option to
-  // force flash access.
   int opt;
   int option_index = 0;
   vpd_err_t retval = VPD_OK;
@@ -430,6 +432,7 @@ int main(int argc, char* argv[]) {
       {"raw", 0, 0, 'R'},
       {"null-terminated", 0, 0, '0'},
       {"delete", 0, 0, 'd'},
+      {"no-cache", 0, 0, 'n'},
       {0, 0, 0, 0}};
   vpd::VpdRegion region = vpd::VpdRo;
   std::string region_name = "RO_VPD";
@@ -450,6 +453,7 @@ int main(int argc, char* argv[]) {
   int modified = 0;
   bool read_from_file = false;
   bool raw_input = false;
+  bool use_cache = true;
 
   while ((opt = getopt_long(argc, argv, optstring, long_options,
                             &option_index)) != EOF) {
@@ -517,6 +521,10 @@ int main(int argc, char* argv[]) {
         raw_input = true;
         break;
 
+      case 'n':
+        use_cache = false;
+        break;
+
       case 0:
         break;
 
@@ -538,6 +546,12 @@ int main(int argc, char* argv[]) {
     return VPD_ERR_SYNTAX;
   }
 
+  if (use_cache && (raw_input || filename)) {
+    /* use_cache is default, but doesn't apply to raw or file-backed. Silently
+     * disable. */
+    use_cache = false;
+  }
+
   if (VPD_EXPORT_KEY_VALUE != export_type && !list_it) {
     fprintf(stderr,
             "[ERROR] --sh/--null-terminated can be set only if -l is set.\n");
@@ -554,9 +568,30 @@ int main(int argc, char* argv[]) {
     return VPD_ERR_SYNTAX;
   }
 
+  vpd::Cache cache;
   std::vector<uint8_t> vpd_blob;
-  /* if no filename is specified, call flashrom to read from flash. */
-  if (!filename) {
+  if (filename) {
+    auto blob = base::ReadFileToBytes(base::FilePath(*filename));
+    if (!blob) {
+      return VPD_FAIL;
+    }
+    vpd_blob = std::move(*blob);
+    save_file = filename;
+  } else if (use_cache) {
+    if (key_to_export) {
+      auto value = cache.GetValue(region, *key_to_export);
+      if (value) {
+        kv_dict[*key_to_export] = *value;
+      }
+    } else {
+      kv_dict = cache.GetValues(region);
+    }
+  } else {
+    /*
+     * fall back to flashrom if we're not loading from a file, and we weren't
+     * allowed to use the cache.
+     */
+    LOG(WARNING) << "Falling back to flashrom for reading the flash.";
     auto blob = flashrom.Read(region);
     if (!blob) {
       fprintf(stderr, "[ERROR] flashrom read error!\n");
@@ -565,27 +600,22 @@ int main(int argc, char* argv[]) {
     vpd_blob = std::move(*blob);
 
     write_back_to_flash = true;
-  } else {
-    auto blob = base::ReadFileToBytes(base::FilePath(*filename));
-    if (!blob) {
-      return VPD_FAIL;
-    }
-    vpd_blob = std::move(*blob);
-    save_file = filename;
   }
 
-  if (raw_input) {
-    auto res = vpd::Encoder::DecodeRaw(vpd_blob);
-    if (!res) {
-      return VPD_ERR_DECODE;
-    }
-    kv_dict = std::move(*res);
-  } else {
-    retval = loadFile(vpd_blob, region_name, region, flashrom, overwrite_it,
-                      &kv_dict);
-    if (VPD_OK != retval) {
-      fprintf(stderr, "loadFile() error.\n");
-      return retval;
+  if (!use_cache) {
+    if (raw_input) {
+      auto res = vpd::Encoder::DecodeRaw(vpd_blob);
+      if (!res) {
+        return VPD_ERR_DECODE;
+      }
+      kv_dict = std::move(*res);
+    } else {
+      retval = loadFile(vpd_blob, region_name, region, flashrom, overwrite_it,
+                        &kv_dict);
+      if (VPD_OK != retval) {
+        fprintf(stderr, "loadFile() error.\n");
+        return retval;
+      }
     }
   }
 
@@ -653,6 +683,34 @@ int main(int argc, char* argv[]) {
     }
 
     fwrite(list.data(), list.size(), 1, stdout);
+  }
+
+  if (modified && use_cache) {
+    std::map<std::string, std::optional<std::string>> write_values;
+
+    /* Marshall -s arguments first */
+    for (const auto& pair : set_argument) {
+      write_values[pair.first] = pair.second;
+    }
+
+    /* Marhsll -d after, in case they cancel out -s. */
+    for (const auto& pair : del_argument) {
+      if (write_values.erase(pair.first)) {
+        /* canceled -s. That's enough. */
+        continue;
+      }
+
+      /* nullopt means delete. */
+      write_values[pair.first] = std::nullopt;
+    }
+
+    if (!cache.WriteValues(region, write_values)) {
+      LOG(ERROR) << "Writeback failed";
+      return VPD_ERR_ROM_WRITE;
+    }
+
+    /* If we used the cache, no need to go any further. */
+    return VPD_OK;
   }
 
   if (modified) {
