@@ -72,8 +72,7 @@ int isbase64(uint8_t c) {
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
 }
 
-std::optional<std::vector<uint8_t>> read_string_from_file(
-    const char* file_name) {
+std::optional<std::string> read_string_from_file(const std::string& file_name) {
   uint32_t i, j;
 
   auto file_buffer = base::ReadFileToBytes(base::FilePath(file_name));
@@ -94,22 +93,21 @@ std::optional<std::vector<uint8_t>> read_string_from_file(
 
     if (!isbase64(c)) {
       fprintf(stderr, "[ERROR] file %s is not in base64 format (%c at %d)\n",
-              file_name, c, i);
+              file_name.c_str(), c, i);
       return {};
     }
     (*file_buffer)[j++] = c;
   }
   (*file_buffer)[j] = '\0';
 
-  return file_buffer;
+  return std::string(reinterpret_cast<const char*>(file_buffer->data()));
 }
 
 /*
  * Check if given key name is compliant to recommended format.
  */
-vpd_err_t checkKeyName(const uint8_t* name) {
-  unsigned char c;
-  while ((c = *name++)) {
+vpd_err_t checkKeyName(const std::string& name) {
+  for (const auto& c : name) {
     if (!(isalnum(c) || c == '_' || c == '.')) {
       fprintf(stderr, "[ERROR] VPD key name does not allow char [%c].\n", c);
       return VPD_ERR_PARAM;
@@ -125,31 +123,21 @@ vpd_err_t checkKeyName(const uint8_t* name) {
  * contain characters a-z, A-Z, 0-9 or dash (-).
  * TODO(b/288327526): subsume into libvpd?
  */
-vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
-  int is_serial_number = 0;
-  size_t value_len = 0;
-  unsigned char c;
-
+vpd_err_t checkKeyValuePair(const std::string& key, const std::string& value) {
   vpd_err_t retval = checkKeyName(key);
   if (retval != VPD_OK)
     return retval;
 
-  if (strncmp("serial_number", (const char*)key, sizeof("serial_number")) ==
-          0 ||
-      strncmp("mlb_serial_number", (const char*)key,
-              sizeof("mlb_serial_number")) == 0)
-    is_serial_number = 1;
-
-  if (is_serial_number) {
+  if (key == "serial_number" || key == "mlb_serial_number") {
     // For serial numbers, we only allow a-z, A-Z, 0-9 and dash (-).
-    for (value_len = 0; (c = value[value_len]); value_len++) {
+    for (const auto& c : value) {
       if (!(isalnum(c) || c == '-')) {
         fprintf(stderr, "[ERROR] serial number does not allow char [%c].\n", c);
         return VPD_ERR_PARAM;
       }
     }
 
-    if (value_len == 0) {
+    if (value.empty()) {
       fprintf(stderr, "[ERROR] serial number cannot be empty.\n");
       return VPD_ERR_PARAM;
     }
@@ -159,7 +147,7 @@ vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
       return VPD_ERR_PARAM;
     }
 
-    if (value[value_len - 1] == '-') {
+    if (value.back() == '-') {
       fprintf(stderr, "[ERROR] serial number cannot end with [-].\n");
       return VPD_ERR_PARAM;
     }
@@ -173,52 +161,38 @@ vpd_err_t checkKeyValuePair(const uint8_t* key, const uint8_t* value) {
  * pair container. The 'value' can be stored in a base64 format file, in this
  * case the value field is the file name.
  */
-vpd_err_t parseString(const uint8_t* string,
+vpd_err_t parseString(const std::string& string,
                       bool read_from_file,
                       std::map<std::string, std::string>* set_argument) {
-  uint8_t* value;
-  std::optional<std::vector<uint8_t>> file_contents;
   vpd_err_t retval = VPD_OK;
 
-  uint8_t* key =
-      reinterpret_cast<uint8_t*>(strdup(reinterpret_cast<const char*>(string)));
-  if (!key || key[0] == '\0' || key[0] == '=') {
-    if (key)
-      free(key);
+  if (string.empty() || string[0] == '\0' || string[0] == '=') {
     return VPD_ERR_SYNTAX;
   }
 
-  /*
-   * Goes through the key string, and stops at the first '='.
-   * If '=' is not found, the whole string is the key and
-   * the value points to the end of string ('\0').
-   */
-  for (value = key; *value && *value != '='; value++) {
+  size_t delim_pos = string.find('=');
+  std::string key = string.substr(0, delim_pos);
+  std::string value;
+  if (delim_pos != std::string::npos) {
+    value = string.substr(delim_pos + 1);
   }
-  if (*value == '=') {
-    *(value++) = '\0';
 
-    if (read_from_file) {
-      /* 'value' in fact is a file name */
-      file_contents = read_string_from_file((const char*)value);
-      if (!file_contents) {
-        free(key);
-        return VPD_ERR_SYNTAX;
-      }
-      value = file_contents->data();
+  if (read_from_file) {
+    /* 'value' in fact is a file name */
+    const auto file_contents = read_string_from_file(value);
+    if (!file_contents) {
+      return VPD_ERR_SYNTAX;
     }
+    value = *file_contents;
   }
 
   retval = checkKeyValuePair(key, value);
-  if (retval == VPD_OK) {
-    std::string k(reinterpret_cast<const char*>(key));
-    std::string v(reinterpret_cast<const char*>(value));
-    (*set_argument)[k] = v;
+  if (retval != VPD_OK) {
+    return retval;
   }
 
-  free(key);
-
-  return retval;
+  (*set_argument)[key] = value;
+  return VPD_OK;
 }
 
 /* There are two possible file content appearng here:
@@ -470,13 +444,13 @@ int main(int argc, char* argv[]) {
         read_from_file = true;
         /* Fall through into the next case */
       case 's':
-        retval = parseString(reinterpret_cast<uint8_t*>(optarg), read_from_file,
-                             &set_argument);
+        retval =
+            parseString(std::string(optarg), read_from_file, &set_argument);
         if (VPD_OK != retval) {
           fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
           return retval;
         }
-        read_from_file = 0;
+        read_from_file = false;
         break;
 
       case 'i':
