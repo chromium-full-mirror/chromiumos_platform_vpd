@@ -42,26 +42,12 @@ namespace {
   "# Or an empty line followed by other commands.\n"                   \
   "#\n"
 
-/* The EPS base address used to fill the EPS table entry.
- * If the VPD partition can be found in fmap, this points to the starting
- * offset of VPD partition. If not found, this is used to be the base address
- * to increase the VPD 2.0 offset field.
- */
-#define UNKNOWN_EPS_BASE ((uint32_t)-1)
-uint32_t eps_base = UNKNOWN_EPS_BASE;
-
 /* If found_vpd, replace the VPD partition when saveFile().
  * If not found, always create new file when saveFile(). */
 bool found_vpd = false;
 
-/* The VPD partition offset and size in buffer. The whole partition includes:
- *
- *   SMBIOS EPS
- *   SMBIOS tables[]
- *   VPD 2.0 data
- *
- */
-uint32_t vpd_offset = 0, vpd_size; /* The whole partition */
+/* The VPD partition offset and size in buffer. */
+uint32_t vpd_offset = 0, vpd_size;
 
 int isbase64(uint8_t c) {
   return isalnum(c) || (c == '+') || (c == '/') || (c == '=');
@@ -244,9 +230,7 @@ vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
                    std::map<std::string, std::string>* kv_dict) {
   vpd_err_t retval = VPD_OK;
 
-  if (0 == findVpdPartition(vpd_blob, region_name, &vpd_offset, &vpd_size)) {
-    eps_base = vpd_offset;
-  } else {
+  if (findVpdPartition(vpd_blob, region_name, &vpd_offset, &vpd_size)) {
     /* We cannot parse out the VPD partition address from given file.
      * Then, try to read the whole BIOS chip. */
     uint32_t offset, size;
@@ -259,23 +243,10 @@ vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
       }
       return retval;
     }
-    eps_base = offset;
     vpd_size = size;
   }
 
-  /* Update the following variables:
-   *   eps_base: integer, the VPD EPS address in ROM.
-   *   vpd_offset: integer, the VPD partition offset in file (formerly
-   *     read_buf[]).
-   *   vpd_buf: uint8_t*, points to the VPD partition.
-   */
   const uint8_t* vpd_buf = vpd_blob.data() + vpd_offset;
-
-  if (eps_base == UNKNOWN_EPS_BASE) {
-    LOG(ERROR) << "Cannot determine eps_base. Cannot go on. Ensure you have a "
-                  "valid FMAP.";
-    return VPD_ERR_INVALID;
-  }
 
   /* In overwrite mode, we don't care the content inside. Stop parsing. */
   if (overwrite_it) {
