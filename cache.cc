@@ -42,10 +42,10 @@ std::vector<const KeyVal> MapToVector(
 Cache::Cache(const base::FilePath& fake_flash_path,
              unsigned int size,
              const base::FilePath& cache_dir)
-    : flashrom_("dummy",
-                base::StringPrintf("emulate=VARIABLE_SIZE,size=%u,image=%s",
-                                   size,
-                                   fake_flash_path.value().c_str())),
+    : programmer_args_(
+          base::StringPrintf("emulate=VARIABLE_SIZE,size=%u,image=%s",
+                             size,
+                             fake_flash_path.value().c_str())),
       cache_file_({
           {VpdRo, CacheFile(VpdRo, cache_dir)},
           {VpdRw, CacheFile(VpdRw, cache_dir)},
@@ -93,12 +93,20 @@ bool Cache::WriteBack(VpdRegion region) {
     return false;
   }
 
-  if (!flashrom_.Write(region, *blob)) {
+  if (!GetFlashrom().Write(region, *blob)) {
     LOG(ERROR) << "flashrom failure";
     return false;
   }
 
   return true;
+}
+
+Flashrom Cache::GetFlashrom() const {
+  if (programmer_args_) {
+    return Flashrom("dummy", *programmer_args_);
+  }
+
+  return Flashrom();
 }
 
 std::optional<std::string> Cache::GetValue(VpdRegion region,

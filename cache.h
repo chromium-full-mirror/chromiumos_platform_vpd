@@ -44,9 +44,12 @@ class BRILLO_EXPORT Cache : public VpdProviderInterface {
  private:
   void Populate();
   bool WriteBack(VpdRegion region);
+  Flashrom GetFlashrom() const;
+
+  // Flashrom programmer args; only for tests.
+  std::optional<std::string> programmer_args_;
 
   Sysfs sysfs_;
-  Flashrom flashrom_;
   bool populated_ = false;
   std::map<VpdRegion, CacheFile> cache_file_ = {
       {VpdRo, CacheFile(VpdRo)},
