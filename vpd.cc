@@ -4,24 +4,19 @@
  * found in the LICENSE file.
  */
 
+#include <iostream>
 #include <optional>
 #include <string>
 
 #include <assert.h>
 #include <ctype.h>
-#include <errno.h>
 #include <fmap.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <uuid/uuid.h>
 
 #include <base/files/file_util.h>
 #include <base/logging.h>
@@ -92,8 +87,8 @@ std::optional<std::string> read_string_from_file(const std::string& file_name) {
       continue; /* Skip EOL characters */
 
     if (!isbase64(c)) {
-      fprintf(stderr, "[ERROR] file %s is not in base64 format (%c at %d)\n",
-              file_name.c_str(), c, i);
+      LOG(ERROR) << "file " << file_name << " is not in base64 format: " << c
+                 << " at " << i;
       return {};
     }
     (*file_buffer)[j++] = c;
@@ -109,7 +104,7 @@ std::optional<std::string> read_string_from_file(const std::string& file_name) {
 vpd_err_t checkKeyName(const std::string& name) {
   for (const auto& c : name) {
     if (!(isalnum(c) || c == '_' || c == '.')) {
-      fprintf(stderr, "[ERROR] VPD key name does not allow char [%c].\n", c);
+      LOG(ERROR) << "VPD key name does not allow char: " << c;
       return VPD_ERR_PARAM;
     }
   }
@@ -132,23 +127,23 @@ vpd_err_t checkKeyValuePair(const std::string& key, const std::string& value) {
     // For serial numbers, we only allow a-z, A-Z, 0-9 and dash (-).
     for (const auto& c : value) {
       if (!(isalnum(c) || c == '-')) {
-        fprintf(stderr, "[ERROR] serial number does not allow char [%c].\n", c);
+        LOG(ERROR) << "serial number does not allow char: " << c;
         return VPD_ERR_PARAM;
       }
     }
 
     if (value.empty()) {
-      fprintf(stderr, "[ERROR] serial number cannot be empty.\n");
+      LOG(ERROR) << "serial number cannot be empty";
       return VPD_ERR_PARAM;
     }
 
     if (value[0] == '-') {
-      fprintf(stderr, "[ERROR] serial number cannot start with [-].\n");
+      LOG(ERROR) << "serial number cannot start with [-]";
       return VPD_ERR_PARAM;
     }
 
     if (value.back() == '-') {
-      fprintf(stderr, "[ERROR] serial number cannot end with [-].\n");
+      LOG(ERROR) << "serial number cannot end with [-]";
       return VPD_ERR_PARAM;
     }
   }
@@ -260,7 +255,7 @@ vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
         retval = VPD_OK;
       } else {
         retval = VPD_FAIL;
-        fprintf(stderr, "[ERROR] GetPartitionDimensions failed.");
+        LOG(ERROR) << "GetPartitionDimensions failed";
       }
       return retval;
     }
@@ -277,9 +272,8 @@ vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
   const uint8_t* vpd_buf = vpd_blob.data() + vpd_offset;
 
   if (eps_base == UNKNOWN_EPS_BASE) {
-    fprintf(stderr,
-            "[ERROR] Cannot determine eps_base. Cannot go on.\n"
-            "        Ensure you have a valid FMAP.\n");
+    LOG(ERROR) << "Cannot determine eps_base. Cannot go on. Ensure you have a "
+                  "valid FMAP.";
     return VPD_ERR_INVALID;
   }
 
@@ -308,14 +302,14 @@ vpd_err_t saveFile(const std::vector<uint8_t>& blob, const char* filename) {
     /* We found VPD partition in -f file, which means file is existed.
      * Instead of truncating the whole file, open to write partial. */
     if (!(fp = fopen(filename, "r+"))) {
-      fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
+      PLOG(ERROR) << "File cannot be opened for write: " << filename;
       return VPD_ERR_SYSTEM;
     }
   } else {
     /* VPD is not found, which means the file is pure VPD data.
      * Always creates the new file and overwrites the original content. */
     if (!(fp = fopen(filename, "w+"))) {
-      fprintf(stderr, "File [%s] cannot be opened for write.\n", filename);
+      PLOG(ERROR) << "File cannot be opened for write: " << filename;
       return VPD_ERR_SYSTEM;
     }
   }
@@ -325,7 +319,7 @@ vpd_err_t saveFile(const std::vector<uint8_t>& blob, const char* filename) {
   /* write entire blob */
   fseek(fp, file_seek, SEEK_SET);
   if (fwrite(blob.data(), blob.size(), 1, fp) != 1) {
-    fprintf(stderr, "fwrite() error (%s)\n", strerror(errno));
+    PLOG(ERROR) << "fwrite() error";
     retval = VPD_ERR_SYSTEM;
     goto teardown;
   }
@@ -352,37 +346,39 @@ std::string ShellSingleQuoteEscape(std::string s) {
 }
 
 void usage(const char* progname) {
-  printf("Chrome OS VPD 2.0 utility --\n");
+  std::cout
+      << "Chrome OS VPD 2.0 utility --\n"
 #ifdef VPD_VERSION
-  printf("%s\n", VPD_VERSION);
+      << VPD_VERSION "\n"
+      <<
 #endif
-  printf("\n");
-  printf("Usage: %s [OPTION] ...\n", progname);
-  printf("   OPTIONs include:\n");
-  printf("      -h               This help page and version.\n");
-  printf("      -f <filename>    The output file name.\n");
-  printf("      -E <address>     EPS base address (default:0x240000).\n");
-  printf("      -S <key=file>    To add/change a string value, reading its\n");
-  printf("                       base64 contents from a file.\n");
-  printf("      -s <key=value>   To add/change a string value.\n");
-  printf("      -i <partition>   Specify VPD partition name in fmap.\n");
-  printf("      -l               List content in the file.\n");
-  printf("      --sh             Dump content for shell script.\n");
-  printf("      --raw            Parse from a raw blob (without headers).\n");
-  printf("      -0/--null-terminated\n");
-  printf("                       Dump content in null terminate format.\n");
-  printf("      -O               Overwrite and re-format VPD partition.\n");
-  printf("      -g <key>         Print value string only.\n");
-  printf("      -d <key>         Delete a key.\n");
-  printf("      --no-cache       Do not use the VPD cache; access the flash\n");
-  printf("                       directly. Only applies to non-filebacked\n");
-  printf("                       operations.\n");
-  printf("\n");
-  printf("   Notes:\n");
-  printf("      You can specify multiple -s and -d. However, vpd always\n");
-  printf("         applies -s first, then -d.\n");
-  printf("      -g and -l must be mutually exclusive.\n");
-  printf("\n");
+      "\n"
+      "Usage: "
+      << progname << " [OPTION] ...\n"
+      << "   OPTIONs include:\n"
+         "      -h               This help page and version.\n"
+         "      -f <filename>    The output file name.\n"
+         "      -E <address>     EPS base address default:0x240000).\n"
+         "      -S <key=file>    To add/change a string value, reading its\n"
+         "                       base64 contents from a file.\n"
+         "      -s <key=value>   To add/change a string value.\n"
+         "      -i <partition>   Specify VPD partition name in fmap.\n"
+         "      -l               List content in the file.\n"
+         "      --sh             Dump content for shell script.\n"
+         "      --raw            Parse from a raw blob (without headers).\n"
+         "      -0/--null-terminated\n"
+         "                       Dump content in null terminate format.\n"
+         "      -O               Overwrite and re-format VPD partition.\n"
+         "      -g <key>         Print value string only.\n"
+         "      -d <key>         Delete a key.\n"
+         "      --no-cache       Do not use the VPD cache; access the flash\n"
+         "                       directly. Only applies to non-filebacked\n"
+         "                       operations.\n"
+         "\n"
+         "   Notes:\n"
+         "      You can specify multiple -s and -d. However, vpd always\n"
+         "         applies -s first, then -d.\n"
+         "      -g and -l must be mutually exclusive.\n";
 }
 
 }  // namespace
@@ -447,7 +443,7 @@ int main(int argc, char* argv[]) {
         retval =
             parseString(std::string(optarg), read_from_file, &set_argument);
         if (VPD_OK != retval) {
-          fprintf(stderr, "The string [%s] cannot be parsed.\n\n", optarg);
+          LOG(ERROR) << "The string [" << optarg << "] cannot be parsed.";
           return retval;
         }
         read_from_file = false;
@@ -503,20 +499,21 @@ int main(int argc, char* argv[]) {
         break;
 
       default:
-        fprintf(stderr, "Invalid option '%c' (%s), use --help for usage.\n",
-                opt, optarg);
+        LOG(ERROR) << base::StringPrintf("Invalid option '%c' (%s)", opt,
+                                         optarg ? optarg : "<no argument>");
+        usage(argv[0]);
         return VPD_ERR_SYNTAX;
     }
   }
 
   if (optind < argc) {
-    fprintf(stderr, "[ERROR] unexpected argument: %s\n\n", argv[optind]);
+    LOG(ERROR) << "unexpected argument: " << argv[optind];
     usage(argv[0]);
     return VPD_ERR_SYNTAX;
   }
 
   if (list_it && key_to_export) {
-    fprintf(stderr, "[ERROR] -l and -g must be mutually exclusive.\n");
+    LOG(ERROR) << "-l and -g must be mutually exclusive";
     return VPD_ERR_SYNTAX;
   }
 
@@ -527,18 +524,17 @@ int main(int argc, char* argv[]) {
   }
 
   if (VPD_EXPORT_KEY_VALUE != export_type && !list_it) {
-    fprintf(stderr,
-            "[ERROR] --sh/--null-terminated can be set only if -l is set.\n");
+    LOG(ERROR) << "--sh/--null-terminated can be set only if -l is set";
     return VPD_ERR_SYNTAX;
   }
 
   if (raw_input && !filename) {
-    fprintf(stderr, "[ERROR] Needs -f FILE for raw input.\n");
+    LOG(ERROR) << "Needs -f FILE for raw input";
     return VPD_ERR_SYNTAX;
   }
 
   if (raw_input && (!set_argument.empty() || !del_argument.empty())) {
-    fprintf(stderr, "[ERROR] Changing in raw mode is not supported.\n");
+    LOG(ERROR) << "Changing in raw mode is not supported";
     return VPD_ERR_SYNTAX;
   }
 
@@ -568,7 +564,7 @@ int main(int argc, char* argv[]) {
     LOG(WARNING) << "Falling back to flashrom for reading the flash.";
     auto blob = flashrom.Read(region);
     if (!blob) {
-      fprintf(stderr, "[ERROR] flashrom read error!\n");
+      LOG(ERROR) << "flashrom read error";
       return VPD_ERR_ROM_READ;
     }
     vpd_blob = std::move(*blob);
@@ -587,7 +583,7 @@ int main(int argc, char* argv[]) {
       retval = loadFile(vpd_blob, region_name, region, flashrom, overwrite_it,
                         &kv_dict);
       if (VPD_OK != retval) {
-        fprintf(stderr, "loadFile() error.\n");
+        LOG(ERROR) << "loadFile() error: " << retval;
         return retval;
       }
     }
@@ -604,9 +600,8 @@ int main(int argc, char* argv[]) {
   /* Do -d */
   for (auto& pair : del_argument) {
     if (!kv_dict.erase(pair.first)) {
-      fprintf(stderr,
-              "[ERROR] At least one of the keys to delete"
-              " does not exist. Command ignored.\n");
+      LOG(ERROR) << "At least one of the keys to delete does not exist. "
+                    "Command ignored.";
       return VPD_ERR_PARAM;
     }
   }
@@ -618,8 +613,8 @@ int main(int argc, char* argv[]) {
   if (key_to_export) {
     const auto& pair = kv_dict.find(*key_to_export);
     if (pair == kv_dict.end()) {
-      fprintf(stderr, "key lookup: Vpd data '%s' was not found.\n",
-              key_to_export->c_str());
+      LOG(ERROR) << "key lookup: Vpd data '" << *key_to_export
+                 << "' was not found";
       return VPD_FAIL;
     } else {
       fwrite(pair->second.data(), strlen(pair->second.data()), 1, stdout);
@@ -650,10 +645,10 @@ int main(int argc, char* argv[]) {
 
     /* Export necessary program parameters */
     if (VPD_EXPORT_AS_PARAMETER == export_type) {
-      printf("%s%s -i %s \\\n", SH_COMMENT, argv[0], region_name.c_str());
+      std::cout << SH_COMMENT << argv[0] << " -i " << region_name << " \\\n";
 
       if (filename)
-        printf("    -f %s \\\n", filename->c_str());
+        std::cout << "    -f " << *filename << " \\\n";
     }
 
     fwrite(list.data(), list.size(), 1, stdout);
@@ -690,21 +685,20 @@ int main(int argc, char* argv[]) {
   if (modified) {
     auto blob = vpd::Encoder::Encode(kv_dict);
     if (!blob) {
-      fprintf(stderr, "Encode() error\n");
+      LOG(ERROR) << "Encode() error";
       return VPD_FAIL;
     }
     if (save_file) {
       retval = saveFile(*blob, save_file->c_str());
       if (VPD_OK != retval) {
-        fprintf(stderr, "saveFile('%s') error: %d\n", filename->c_str(),
-                retval);
+        LOG(ERROR) << "saveFile " << *filename << ", error: " << retval;
         return retval;
       }
     }
 
     if (write_back_to_flash) {
       if (!flashrom.Write(region, vpd_blob)) {
-        fprintf(stderr, "flashrom write error\n");
+        LOG(ERROR) << "flashrom write error";
         return VPD_ERR_ROM_WRITE;
       }
     }
