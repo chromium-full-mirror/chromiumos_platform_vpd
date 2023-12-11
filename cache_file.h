@@ -19,9 +19,9 @@ class BRILLO_EXPORT CacheFile {
  public:
   explicit CacheFile(VpdRegion region);
   CacheFile(VpdRegion region, const base::FilePath& cacheDir);
-  bool Exists();
-  bool Read(std::vector<const KeyVal>* kv);
-  bool Write(const std::vector<const KeyVal>& kv);
+  bool Exists() const;
+  bool Read(std::vector<const KeyVal>* kv) const;
+  bool Write(const std::vector<const KeyVal>& kv) const;
 
  private:
   base::FilePath path_;

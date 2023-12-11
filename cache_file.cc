@@ -35,11 +35,11 @@ CacheFile::CacheFile(VpdRegion region)
 CacheFile::CacheFile(VpdRegion region, const base::FilePath& cacheDir)
     : path_(CacheFilePath(region, cacheDir)) {}
 
-bool CacheFile::Exists() {
+bool CacheFile::Exists() const {
   return base::PathExists(path_);
 }
 
-bool CacheFile::Read(std::vector<const KeyVal>* kv) {
+bool CacheFile::Read(std::vector<const KeyVal>* kv) const {
   std::string data;
   if (!base::ReadFileToString(path_, &data)) {
     LOG(ERROR) << "Failed to read cache file: " << path_;
@@ -68,7 +68,7 @@ bool CacheFile::Read(std::vector<const KeyVal>* kv) {
   return true;
 }
 
-bool CacheFile::Write(const std::vector<const KeyVal>& kvs) {
+bool CacheFile::Write(const std::vector<const KeyVal>& kvs) const {
   std::string data;
 
   for (const auto& kv : kvs) {

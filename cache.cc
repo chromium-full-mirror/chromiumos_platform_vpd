@@ -53,41 +53,32 @@ Cache::Cache(const base::FilePath& fake_flash_path,
 
 Cache::~Cache() {}
 
-void Cache::Populate() {
-  if (populated_) {
-    return;
-  }
+// Pull key/value map from either the cache file or from sysfs.
+std::map<std::string, std::string> Cache::ReadValues(VpdRegion region) const {
+  std::vector<const KeyVal> pairs;
 
-  std::vector<const KeyVal> ro, rw;
-
-  if (cache_file_.at(VpdRo).Exists()) {
-    CHECK(cache_file_.at(VpdRo).Read(&ro));
+  if (cache_file_.at(region).Exists()) {
+    CHECK(cache_file_.at(region).Read(&pairs));
   } else {
-    ro = sysfs_.GetValues(VpdRo);
-  }
-  if (cache_file_.at(VpdRw).Exists()) {
-    CHECK(cache_file_.at(VpdRw).Read(&rw));
-  } else {
-    rw = sysfs_.GetValues(VpdRw);
+    pairs = sysfs_.GetValues(region);
   }
 
-  for (const auto& kv : ro) {
-    cache_[VpdRo][kv.key] = kv.value;
-  }
-  for (const auto& kv : rw) {
-    cache_[VpdRw][kv.key] = kv.value;
+  std::map<std::string, std::string> ret;
+  for (const auto& kv : pairs) {
+    ret[kv.key] = kv.value;
   }
 
-  populated_ = true;
+  return ret;
 }
 
-bool Cache::WriteBack(VpdRegion region) {
-  if (!cache_file_.at(region).Write(MapToVector(cache_[region]))) {
+bool Cache::WriteBack(VpdRegion region,
+                      const std::map<std::string, std::string>& kvs) {
+  if (!cache_file_.at(region).Write(MapToVector(kvs))) {
     LOG(ERROR) << "Failed to write cache";
     return false;
   }
 
-  const auto& blob = Encoder::Encode(cache_[region]);
+  const auto& blob = Encoder::Encode(kvs);
   if (!blob) {
     LOG(ERROR) << "failed to encode VPD blob";
     return false;
@@ -111,47 +102,37 @@ Flashrom Cache::GetFlashrom() const {
 
 std::optional<std::string> Cache::GetValue(VpdRegion region,
                                            const std::string& key) const {
-  if (populated_) {
-    const auto& map = cache_.at(region);
-    const auto& it = map.find(key);
-    if (it != map.end()) {
-      return it->second;
-    }
-    return {};
+  const auto map = ReadValues(region);
+  const auto& it = map.find(key);
+  if (it != map.end()) {
+    return it->second;
   }
-
-  return sysfs_.GetValue(region, key);
+  return {};
 }
 
-std::map<std::string, std::string> Cache::GetValues(VpdRegion region) {
-  // We're going to need most of the keys, so might as well
-  // populate everything.
-  Populate();
-
-  CHECK(populated_);
-
-  return cache_.at(region);
+std::map<std::string, std::string> Cache::GetValues(VpdRegion region) const {
+  return ReadValues(region);
 }
 
 bool Cache::WriteValues(
     VpdRegion region,
     const std::map<std::string, std::optional<std::string>>& pairs) {
-  Populate();
-
   if (pairs.empty()) {
     LOG(ERROR) << "nothing to write";
     return false;
   }
 
+  auto map = ReadValues(region);
+
   for (const auto& pair : pairs) {
     if (pair.second) {
-      cache_[region][pair.first] = *pair.second;
+      map[pair.first] = *pair.second;
     } else {
-      cache_[region].erase(pair.first);
+      map.erase(pair.first);
     }
   }
 
-  return WriteBack(region);
+  return WriteBack(region, map);
 }
 
 }  // namespace vpd

@@ -34,8 +34,9 @@ class BRILLO_EXPORT FakeVpd : public VpdProviderInterface {
     return it->second;
   }
 
-  std::map<std::string, std::string> GetValues(VpdRegion region) override {
-    return store_[region];
+  std::map<std::string, std::string> GetValues(
+      VpdRegion region) const override {
+    return store_.at(region);
   }
 
   bool WriteValues(

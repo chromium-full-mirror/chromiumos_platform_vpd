@@ -25,7 +25,8 @@ class VpdProviderInterface {
   // Read all key/value pairs from a VPD region.
   //
   // See vpd.h for API definition.
-  virtual std::map<std::string, std::string> GetValues(VpdRegion region) = 0;
+  virtual std::map<std::string, std::string> GetValues(
+      VpdRegion region) const = 0;
 
   // Write or delete one or more key/value pairs to a VPD region.
   //

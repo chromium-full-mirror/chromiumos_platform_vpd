@@ -84,4 +84,33 @@ TEST_F(CacheTest, Delete) {
   EXPECT_TRUE(cache_.WriteValues(VpdRw, {{"foo", std::nullopt}}));
 }
 
+// A second cache object, reading/writing in sequence, as if multiple clients
+// are operating on VPD.
+TEST_F(CacheTest, MultiClient) {
+  FillFlashFile();
+
+  EXPECT_TRUE(cache_.WriteValues(VpdRw, {
+                                            {"foo", "bar"},
+                                            {"serial", "number"},
+                                        }));
+  EXPECT_EQ(cache_.GetValue(VpdRw, "foo"), "bar");
+  EXPECT_EQ(cache_.GetValue(VpdRw, "serial"), "number");
+
+  Cache cache2(fake_flash_path_, 16 * 1024 * 1024, base_dir_);
+  EXPECT_EQ(cache2.GetValue(VpdRw, "foo"), "bar");
+  EXPECT_EQ(cache2.GetValue(VpdRw, "serial"), "number");
+
+  EXPECT_TRUE(cache2.WriteValues(VpdRw, {
+                                            {"serial", "updated serial number"},
+                                            {"another", "entry"},
+                                        }));
+
+  EXPECT_EQ(cache_.GetValue(VpdRw, "foo"), "bar");
+  EXPECT_EQ(cache_.GetValue(VpdRw, "serial"), "updated serial number");
+  EXPECT_EQ(cache_.GetValue(VpdRw, "another"), "entry");
+  EXPECT_EQ(cache2.GetValue(VpdRw, "foo"), "bar");
+  EXPECT_EQ(cache2.GetValue(VpdRw, "serial"), "updated serial number");
+  EXPECT_EQ(cache2.GetValue(VpdRw, "another"), "entry");
+}
+
 }  // namespace vpd

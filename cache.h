@@ -35,29 +35,25 @@ class BRILLO_EXPORT Cache : public VpdProviderInterface {
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const override;
 
-  std::map<std::string, std::string> GetValues(VpdRegion region) override;
+  std::map<std::string, std::string> GetValues(VpdRegion region) const override;
 
   bool WriteValues(
       VpdRegion region,
       const std::map<std::string, std::optional<std::string>>& pairs) override;
 
  private:
-  void Populate();
-  bool WriteBack(VpdRegion region);
+  std::map<std::string, std::string> ReadValues(VpdRegion region) const;
+  bool WriteBack(VpdRegion region,
+                 const std::map<std::string, std::string>& kvs);
   Flashrom GetFlashrom() const;
 
   // Flashrom programmer args; only for tests.
   std::optional<std::string> programmer_args_;
 
   Sysfs sysfs_;
-  bool populated_ = false;
   std::map<VpdRegion, CacheFile> cache_file_ = {
       {VpdRo, CacheFile(VpdRo)},
       {VpdRw, CacheFile(VpdRw)},
-  };
-  std::map<VpdRegion, std::map<std::string, std::string>> cache_ = {
-      {VpdRo, {}},
-      {VpdRw, {}},
   };
 };
 
