@@ -86,8 +86,8 @@ test_image() {
   for arg_name in "--null-terminated" "-0"; do
     RUN "${VPD_OK}" "${BINARY} -f ${BIOS} -O"
     args="-f ${BIOS} -s a=aaa -s b=b -s c=ccc -l ${arg_name}"
-    local expect_result='613d61616100623d6200633d63636300'
-    RUN "${VPD_OK}" "${BINARY} ${args} | xxd -ps" "${expect_result}"
+    local expect_result=' 61 3d 61 61 61 00 62 3d 62 00 63 3d 63 63 63 00'
+    RUN "${VPD_OK}" "${BINARY} ${args} | od -A n -t x1 -w32" "${expect_result}"
   done
 }
 
