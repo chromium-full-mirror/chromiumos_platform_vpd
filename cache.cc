@@ -73,19 +73,21 @@ std::map<std::string, std::string> Cache::ReadValues(VpdRegion region) const {
 
 bool Cache::WriteBack(VpdRegion region,
                       const std::map<std::string, std::string>& kvs) {
-  if (!cache_file_.at(region).Write(MapToVector(kvs))) {
-    LOG(ERROR) << "Failed to write cache";
-    return false;
-  }
-
   const auto& blob = Encoder::Encode(kvs);
   if (!blob) {
     LOG(ERROR) << "failed to encode VPD blob";
     return false;
   }
 
+  // Write the flash first, in case there are obvious errors (e.g., no flash
+  // device). We write the cache file afterward, once we're sure we succeed.
   if (!GetFlashrom().Write(region, *blob)) {
     LOG(ERROR) << "flashrom failure";
+    return false;
+  }
+
+  if (!cache_file_.at(region).Write(MapToVector(kvs))) {
+    LOG(ERROR) << "Failed to write cache";
     return false;
   }
 

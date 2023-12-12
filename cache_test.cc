@@ -113,4 +113,17 @@ TEST_F(CacheTest, MultiClient) {
   EXPECT_EQ(cache2.GetValue(VpdRw, "another"), "entry");
 }
 
+TEST_F(CacheTest, FlashFailure) {
+  // Fake a flash failure by way of an empty (i.e., no VPD regions) FMAP.
+  FillFlashFile(true /* empty_fmap */);
+
+  EXPECT_FALSE(cache_.WriteValues(VpdRw, {{"foo", "bar"}}));
+  // Ensure we didn't update the cache when the flash failed.
+  EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
+
+  // Second instance (e.g., rereading from cache?) is also empty.
+  Cache cache2(fake_flash_path_, 16 * 1024 * 1024, base_dir_);
+  EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
+}
+
 }  // namespace vpd
