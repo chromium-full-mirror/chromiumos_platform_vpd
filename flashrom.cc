@@ -193,6 +193,10 @@ bool Flashrom::Write(VpdRegion region, const std::vector<uint8_t>& blob) {
   }
   std::copy(blob.begin(), blob.end(), flash.begin() + part_offset);
 
+  // Tell flashrom to read back the written region for verification.
+  // NB: without this, flashrom may fail to report write protection errors.
+  flashrom_flag_set(flashctx_, FLASHROM_FLAG_VERIFY_AFTER_WRITE, true);
+
   int rc = flashrom_image_write(flashctx_, flash.data(), flash.size(), nullptr);
   if (rc == 4) {
     LOG(ERROR) << "flashrom blob doesn't fit flash chip";
