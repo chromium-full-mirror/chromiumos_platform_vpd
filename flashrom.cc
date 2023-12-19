@@ -12,6 +12,7 @@ extern "C" {
 #include <string>
 
 #include <base/logging.h>
+#include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 
 #include "vpd/flashrom.h"
@@ -31,6 +32,12 @@ int FlashromLog(enum flashrom_log_level level,
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
   std::string msg = base::StringPrintV(format, va_args);
 #pragma GCC diagnostic warning "-Wformat-nonliteral"
+
+  // libflashrom sends us printf()-style messages, including newlines. Strip
+  // those, a LOG doesn't expect that.
+  // NB: libflashrom also splits lines sometimes (and omits the newline), which
+  // means we'll log a split line.
+  msg = base::TrimString(msg, "\n", base::TRIM_TRAILING);
 
   if (level >= FLASHROM_MSG_INFO) {
     // Flashrom is still pretty noisy at INFO level.
