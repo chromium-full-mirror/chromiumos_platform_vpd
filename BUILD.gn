@@ -95,6 +95,7 @@ install_config("install_libvpd_headers") {
     "fake_vpd.h",
     "types.h",
     "vpd.h",
+    "vpd_provider_interface.h",
   ]
 
   install_path = "/usr/include/vpd"
