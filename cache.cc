@@ -73,7 +73,20 @@ std::map<std::string, std::string> Cache::ReadValues(VpdRegion region) const {
 
 bool Cache::WriteBack(VpdRegion region,
                       const std::map<std::string, std::string>& kvs) {
-  const auto& blob = Encoder::Encode(kvs);
+  auto flashrom = GetFlashrom();
+
+  uint32_t partition_offset, partition_len;
+  if (!flashrom.GetPartitionDimensions(region, &partition_offset,
+                                       &partition_len)) {
+    LOG(ERROR) << "Failed to determine partition dimensions";
+    return false;
+  }
+
+  const auto& blob = Encoder::Encode(
+      Encoder::EncodingParams{
+          .partition_offset = partition_offset,
+      },
+      kvs);
   if (!blob) {
     LOG(ERROR) << "failed to encode VPD blob";
     return false;
@@ -81,7 +94,7 @@ bool Cache::WriteBack(VpdRegion region,
 
   // Write the flash first, in case there are obvious errors (e.g., no flash
   // device). We write the cache file afterward, once we're sure we succeed.
-  if (!GetFlashrom().Write(region, *blob)) {
+  if (!flashrom.Write(region, *blob)) {
     LOG(ERROR) << "flashrom failure";
     return false;
   }

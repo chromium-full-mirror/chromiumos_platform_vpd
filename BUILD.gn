@@ -123,6 +123,7 @@ shared_library("libvpd") {
     "cache_file.cc",
     "encoder.cc",
     "flashrom.cc",
+    "lib/checksum.c",
     "libvpd.cc",
     "sysfs.cc",
   ]

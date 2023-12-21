@@ -282,8 +282,12 @@ vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
     return VPD_OK;
   }
 
-  auto dict =
-      vpd::Encoder::Decode(std::vector<uint8_t>(vpd_buf, vpd_buf + vpd_size));
+  // Decoder wants to export params, but we don't really want to do anything
+  // with them.
+  // TODO(b/288327526): remove.
+  vpd::Encoder::DecodedParams ignored_params;
+  auto dict = vpd::Encoder::Decode(
+      std::vector<uint8_t>(vpd_buf, vpd_buf + vpd_size), &ignored_params);
   if (!dict) {
     return VPD_ERR_DECODE;
   }
@@ -683,7 +687,8 @@ int main(int argc, char* argv[]) {
   }
 
   if (modified) {
-    auto blob = vpd::Encoder::Encode(kv_dict);
+    auto blob = vpd::Encoder::Encode(
+        vpd::Encoder::EncodingParams{.partition_offset = eps_base}, kv_dict);
     if (!blob) {
       LOG(ERROR) << "Encode() error";
       return VPD_FAIL;

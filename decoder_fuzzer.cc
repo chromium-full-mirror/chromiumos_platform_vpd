@@ -15,13 +15,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Turn off logging.
   logging::SetMinLogLevel(logging::LOGGING_FATAL);
 
-  auto dict = Encoder::Decode(std::vector<uint8_t>(data, data + size));
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(std::vector<uint8_t>(data, data + size), &params);
 
   // If we decoded something, why not try re-encoding it?
   if (dict) {
+    Encoder::EncodingParams encoding_params = {
+        .partition_offset = 0,
+        .eps_offset = params.eps_offset,
+    };
     // Don't assume this will succeed, as we might be a bit stricter on
     // encoding inputs. Just fuzz that we don't do Real Bad Things.
-    Encoder::Encode(*dict);
+    Encoder::Encode(encoding_params, *dict);
   }
 
   return 0;

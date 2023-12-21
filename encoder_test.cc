@@ -23,17 +23,22 @@ TEST_F(EncoderTest, Encode) {
       {'p', 'a', 'd', 'd', 'i', 'n', 'g', '\0', '\0', '\0'});
   EXPECT_EQ(10, padded_string.size());
 
-  auto blob = Encoder::Encode({
-      {"foo", "bar"},
-      {"thi/s", ""},
-      {"padded", padded_string},
-      {"Newlines", "are\ndiscouraged"},
-      {"but", "they\nare\nsupported in the encoding"},
-  });
+  auto blob = Encoder::Encode(
+      Encoder::EncodingParams{
+          .partition_offset = 0,
+      },
+      {
+          {"foo", "bar"},
+          {"thi/s", ""},
+          {"padded", padded_string},
+          {"Newlines", "are\ndiscouraged"},
+          {"but", "they\nare\nsupported in the encoding"},
+      });
   ASSERT_NE(std::nullopt, blob);
   ASSERT_LT(0, blob->size());
 
-  auto dict = Encoder::Decode(*blob);
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(*blob, &params);
   ASSERT_NE(std::nullopt, dict);
 
   EXPECT_EQ(5, dict->size());
@@ -52,12 +57,40 @@ TEST_F(EncoderTest, Encode) {
 }
 
 TEST_F(EncoderTest, EncodeEmpty) {
-  auto blob = Encoder::Encode({});
+  auto blob = Encoder::Encode(Encoder::EncodingParams{}, {});
   ASSERT_NE(std::nullopt, blob);
 
-  auto dict = Encoder::Decode(*blob);
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(*blob, &params);
   EXPECT_NE(std::nullopt, dict);
   EXPECT_EQ(0, dict->size());
+}
+
+TEST_F(EncoderTest, EncodeParams) {
+  // Quiet the noisy logs.
+  auto log_level = logging::GetMinLogLevel();
+  logging::SetMinLogLevel(logging::LOGGING_FATAL);
+
+  for (uint32_t eps_offset = 0; eps_offset < 1024; eps_offset++) {
+    auto blob = Encoder::Encode(
+        Encoder::EncodingParams{
+            .partition_offset = 0,
+            .eps_offset = eps_offset,
+        },
+        {
+            {"some", "key"},
+            {"another", "key"},
+        });
+    // Only 16-stride offsets should be accepted.
+    if (eps_offset % 16 == 0) {
+      EXPECT_NE(std::nullopt, blob);
+    } else {
+      EXPECT_EQ(std::nullopt, blob);
+    }
+  }
+
+  // Restore the old level.
+  logging::SetMinLogLevel(log_level);
 }
 
 TEST_F(EncoderTest, Decode) {
@@ -65,7 +98,8 @@ TEST_F(EncoderTest, Decode) {
       base::ReadFileToBytes(base::FilePath("vpd-0.0.1/testdata/ro.bin"));
   ASSERT_NE(std::nullopt, blob);
 
-  auto dict = Encoder::Decode(*blob);
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(*blob, &params);
   ASSERT_NE(std::nullopt, dict);
 
   EXPECT_EQ(dict->end(), dict->find("nonexistentkey"));
@@ -107,7 +141,8 @@ TEST_F(EncoderTest, DecodeEmptyFlash) {
   // this as empty, and not an error.
   const std::vector<uint8_t> ff_flash(16 * 1024, 0xff);
 
-  auto dict = Encoder::Decode(ff_flash);
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(ff_flash, &params);
   ASSERT_NE(std::nullopt, dict);
 
   EXPECT_TRUE(dict->empty());
@@ -120,17 +155,19 @@ TEST_F(EncoderTest, DecodeCorruptFlash) {
   std::vector<uint8_t> blob({0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf});
   blob.resize(16 * 1024, 0xff);
 
-  auto dict = Encoder::Decode(blob);
+  Encoder::DecodedParams params;
+  auto dict = Encoder::Decode(blob, &params);
   EXPECT_EQ(std::nullopt, dict);
 }
 
 TEST_F(EncoderTest, EncodeLength) {
+  const vpd::Encoder::EncodingParams params;
   size_t preamble = sizeof(struct google_vpd_info) + GOOGLE_VPD_2_0_OFFSET;
 
   {
     // 0 length.
     std::map<std::string, std::string> contents = {{"", ""}};
-    auto blob = vpd::Encoder::Encode(contents);
+    auto blob = vpd::Encoder::Encode(params, contents);
     ASSERT_NE(std::nullopt, blob);
 
     ASSERT_LE(preamble, blob->size());
@@ -146,7 +183,7 @@ TEST_F(EncoderTest, EncodeLength) {
     std::string key;
     key.resize(0x7f);
     std::map<std::string, std::string> contents = {{key, ""}};
-    auto blob = vpd::Encoder::Encode(contents);
+    auto blob = vpd::Encoder::Encode(params, contents);
     ASSERT_NE(std::nullopt, blob);
 
     ASSERT_LE(preamble, blob->size());
@@ -164,7 +201,7 @@ TEST_F(EncoderTest, EncodeLength) {
     std::string key;
     key.resize(0x80);
     std::map<std::string, std::string> contents = {{key, ""}};
-    auto blob = vpd::Encoder::Encode(contents);
+    auto blob = vpd::Encoder::Encode(params, contents);
     ASSERT_NE(std::nullopt, blob);
 
     ASSERT_LE(preamble, blob->size());
@@ -183,7 +220,7 @@ TEST_F(EncoderTest, EncodeLength) {
     std::string key;
     key.resize(0x100040);
     std::map<std::string, std::string> contents = {{key, ""}};
-    auto blob = vpd::Encoder::Encode(contents);
+    auto blob = vpd::Encoder::Encode(params, contents);
     ASSERT_NE(std::nullopt, blob);
 
     ASSERT_LE(preamble, blob->size());
@@ -283,26 +320,42 @@ TEST_F(EncoderTest, DecodeLength) {
   }
 }
 
-// Test that we decode what we encoded.
+// Test that input (encoding) and output (decoded) params match up.
 TEST_F(EncoderTest, BidirectionlParams) {
-  auto blob = Encoder::Encode({
-      {"key1", ""},
-      {"key", "largo"},
-      {"a",
-       "looooooooooooooooooooooooooooooooo"
-       "ooooooooooooooooooooooooong one"},
-  });
-  ASSERT_NE(std::nullopt, blob);
-  ASSERT_LT(0, blob->size());
+  std::array params{
+      Encoder::EncodingParams{
+          .partition_offset = 0,
+      },
+      Encoder::EncodingParams{
+          .partition_offset = 0x12300,
+          .eps_offset = 0x100,
+      },
+  };
 
-  auto dict = Encoder::Decode(*blob);
-  ASSERT_NE(std::nullopt, dict);
+  for (const auto& param : params) {
+    auto blob = Encoder::Encode(param, {
+                                           {"key1", ""},
+                                           {"key", "largo"},
+                                           {"a",
+                                            "looooooooooooooooooooooooooooooooo"
+                                            "ooooooooooooooooooooooooong one"},
+                                       });
+    ASSERT_NE(std::nullopt, blob);
+    ASSERT_LT(0, blob->size());
 
-  EXPECT_EQ(3, dict->size());
-  EXPECT_EQ("", (*dict)["key1"]);
-  EXPECT_EQ("largo", (*dict)["key"]);
-  EXPECT_EQ("loooooooooooooooooooooooooooooooooooooooooooooooooooooooooong one",
-            (*dict)["a"]);
+    Encoder::DecodedParams decoded_params;
+    auto dict = Encoder::Decode(*blob, &decoded_params);
+    ASSERT_NE(std::nullopt, dict);
+
+    EXPECT_EQ(3, dict->size());
+    EXPECT_EQ("", (*dict)["key1"]);
+    EXPECT_EQ("largo", (*dict)["key"]);
+    EXPECT_EQ(
+        "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooong one",
+        (*dict)["a"]);
+
+    EXPECT_EQ(decoded_params.eps_offset, param.eps_offset);
+  }
 }
 
 }  // namespace vpd

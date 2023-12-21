@@ -18,11 +18,24 @@ namespace vpd {
 
 class BRILLO_EXPORT Encoder {
  public:
+  struct EncodingParams {
+    // Offset of the VPD region within the flash.
+    uint32_t partition_offset = 0;
+    // All offsets are offsets within the flash partition.
+    uint32_t eps_offset = 0;
+  };
+
   static std::optional<std::vector<uint8_t>> Encode(
+      const EncodingParams& params,
       const std::map<std::string, std::string>& dict);
 
+  struct DecodedParams {
+    // All offsets are offsets within the flash partition.
+    uint32_t eps_offset = 0;
+  };
+
   static std::optional<std::map<std::string, std::string>> Decode(
-      const std::vector<uint8_t>& blob);
+      const std::vector<uint8_t>& blob, DecodedParams* params);
   static std::optional<std::map<std::string, std::string>> DecodeRaw(
       const std::vector<uint8_t>& blob);
 };
