@@ -73,16 +73,12 @@ config("vpd_c") {
 }
 
 install_config("install_init") {
-  sources = [
-    "init/vpd-icc.conf",
-    "init/vpd-log.conf",
-  ]
+  sources = [ "init/vpd-icc.conf" ]
   install_path = "upstart"
 }
 
 install_config("install_sbin_scripts") {
   sources = [
-    "util/dump_vpd_log",
     "util/vpd_get_value",
     "util/vpd_icc",
   ]
