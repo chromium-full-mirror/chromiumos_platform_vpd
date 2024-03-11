@@ -248,6 +248,7 @@ generate_filtered_file_contents_from_vpd() {
     keyboard_layout \
     model_name \
     oem_device_requisition \
+    oem_name \
     panel_backlight_max_nits \
     "Product_S\/N" \
     region \
