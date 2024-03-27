@@ -374,6 +374,19 @@ cleanup() {
   fi
 }
 
+# Checks if kernel lockdown is enabled, exiting with 0 if so and 1 otherwise.
+check_if_kernel_lockdown_enabled() {
+  local lockdown_f="/sys/kernel/security/lockdown"
+
+  # lockdown_f matches the format defined in linux/security/lockdown/lockdown.c
+  # e.g. "[none] integrity confidentiality"
+  # So, kernel lockdown is enabled if the string "[none]" is not present.
+  if [ -f "${lockdown_f}" ] && ! grep -qs "^\[none\]" "${lockdown_f}"; then
+      echo "dump_vpd_log cannot run with kernel lockdown enabled, exiting."
+      exit 0
+  fi
+}
+
 #
 # main()
 #
@@ -409,6 +422,8 @@ main() {
     fi
   fi
   set_world_enterable "${CACHE_DIR}"
+
+  check_if_kernel_lockdown_enabled
 
   # A fake VPD key/value delimiting RO from RW VPD in the dump.
   RO_RW_DELIMITER_KEY='___ro_rw_delimiter___'
