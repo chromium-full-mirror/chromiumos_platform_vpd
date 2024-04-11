@@ -10,7 +10,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/notreached.h"
 #include "base/strings/string_split.h"
 
 #include "vpd/types.h"
@@ -28,7 +27,7 @@ base::FilePath CacheFilePath(VpdRegion region, const base::FilePath& dir) {
   if (region == VpdRw) {
     return dir.Append("rw.txt");
   }
-  NOTREACHED_NORETURN();
+  __builtin_unreachable();
 }
 
 }  // namespace

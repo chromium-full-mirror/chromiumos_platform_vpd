@@ -11,7 +11,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/notreached.h"
 
 #include "vpd/types.h"
 
@@ -29,7 +28,7 @@ base::FilePath VpdRegionToSysfsPath(const base::FilePath& sysfs_dir,
   if (region == VpdRw) {
     return sysfs_dir.Append("rw");
   }
-  NOTREACHED_NORETURN();
+  __builtin_unreachable();
 }
 
 std::optional<std::string> VpdSysfsRead(const base::FilePath& region_dir,
