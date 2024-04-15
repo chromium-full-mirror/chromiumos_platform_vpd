@@ -23,8 +23,6 @@
 
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 
 #include "vpd/cache.h"
 #include "vpd/encoder.h"
@@ -33,6 +31,7 @@ extern "C" {
 #include "vpd/include/lib/lib_vpd.h"
 }  // extern "C"
 #include "vpd/types.h"
+#include "vpd/util/file.h"
 
 namespace {
 
@@ -72,7 +71,7 @@ int isbase64(uint8_t c) {
 std::optional<std::string> read_string_from_file(const std::string& file_name) {
   uint32_t i, j;
 
-  auto file_buffer = base::ReadFileToBytes(base::FilePath(file_name));
+  auto file_buffer = vpd::util::ReadFileToBytes(file_name);
   if (!file_buffer) {
     PLOG(ERROR) << "Failed to read file: " << file_name;
     return {};
@@ -547,7 +546,7 @@ int main(int argc, char* argv[]) {
   vpd::Cache cache;
   std::vector<uint8_t> vpd_blob;
   if (filename) {
-    auto blob = base::ReadFileToBytes(base::FilePath(*filename));
+    auto blob = vpd::util::ReadFileToBytes(filename.value());
     if (!blob) {
       return VPD_FAIL;
     }
