@@ -5,14 +5,15 @@
 #include "vpd/cache_file.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/log/log.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/strings/string_split.h"
 
 #include "vpd/types.h"
+#include "vpd/util/string.h"
 
 namespace vpd {
 
@@ -49,8 +50,8 @@ bool CacheFile::Read(std::vector<const KeyVal>* kv) const {
     return false;
   }
 
-  base::StringPairs pairs;
-  if (!base::SplitStringIntoKeyValuePairs(data, '=', '\n', &pairs)) {
+  std::vector<std::pair<std::string, std::string>> pairs;
+  if (!vpd::util::GetKeyValuePairsFromLines(data, pairs)) {
     LOG(ERROR) << "Failed to parse cache file: " << path_;
     return false;
   }

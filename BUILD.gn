@@ -103,6 +103,7 @@ install_config("install_tmpfiles_conf") {
 }
 
 default_pkg_deps = [
+  "absl",
   "flashrom",
   "fmap",
   "libbrillo",
@@ -123,6 +124,7 @@ shared_library("libvpd") {
     "lib/checksum.c",
     "libvpd.cc",
     "sysfs.cc",
+    "util/string.cc",
   ]
   configs += [ ":target_defaults" ]
   include_dirs = [ "include" ]
@@ -157,6 +159,7 @@ if (use.test) {
       "flashrom_test.cc",
       "integration_test.cc",
       "sysfs_test.cc",
+      "util/string_test.cc",
       "util/update_rw_vpd_test.cc",
     ]
     configs += [
