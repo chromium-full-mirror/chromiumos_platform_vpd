@@ -19,9 +19,9 @@ extern "C" {
 
 #include "absl/log/log.h"
 #include "absl/strings/strip.h"
-#include "base/strings/stringprintf.h"
 
 #include "vpd/types.h"
+#include "vpd/util/string.h"
 
 namespace vpd {
 
@@ -35,9 +35,7 @@ int FlashromLog(enum flashrom_log_level level,
     return 0;
   }
 
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-  std::string msg = base::StringPrintV(format, va_args);
-#pragma GCC diagnostic warning "-Wformat-nonliteral"
+  std::string msg = vpd::util::StringPrintV(format, va_args);
 
   // libflashrom sends us printf()-style messages, including newlines. Strip
   // those, a LOG doesn't expect that.

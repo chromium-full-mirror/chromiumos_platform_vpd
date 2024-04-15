@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdarg.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,6 +11,19 @@
 #include "gtest/gtest.h"
 
 #include "vpd/util/string.h"
+
+namespace {
+
+// Helper function to easily call StringPrintV
+std::string StringPrintVTestHelper(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  std::string result = vpd::util::StringPrintV(format, args);
+  va_end(args);
+  return result;
+}
+
+}  // namespace
 
 namespace vpd {
 
@@ -77,6 +92,22 @@ TEST(GetKeyValuePairsFromLinesTest, MissingItem) {
     KeyValuePairs v;
     EXPECT_FALSE(vpd::util::GetKeyValuePairsFromLines(tc, v));
   }
+}
+
+TEST(StringPrintVTest, RegularContent) {
+  EXPECT_EQ(StringPrintVTestHelper("foo"), "foo");
+  EXPECT_EQ(StringPrintVTestHelper("%s %s", "hello", "world"), "hello world");
+  EXPECT_EQ(StringPrintVTestHelper("%d + %d = %d", 1, 2, 3), "1 + 2 = 3");
+}
+
+TEST(StringPrintVTest, LargeContent) {
+  std::vector<char> buf1(32 * 1024 * 1024, ' ');
+  buf1.back() = '\0';
+  EXPECT_NE(StringPrintVTestHelper("%s", buf1.data()), "");
+
+  std::vector<char> buf2(32 * 1024 * 1024 + 1, ' ');
+  buf2.back() = '\0';
+  EXPECT_EQ(StringPrintVTestHelper("%s", buf2.data()), "");
 }
 
 }  // namespace vpd

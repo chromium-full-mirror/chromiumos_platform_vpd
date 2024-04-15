@@ -5,6 +5,8 @@
 #ifndef UTIL_STRING_H_
 #define UTIL_STRING_H_
 
+#include <stdarg.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +20,8 @@ namespace util {
 EXPORT bool GetKeyValuePairsFromLines(
     const std::string& lines,
     std::vector<std::pair<std::string, std::string>>& result);
+
+EXPORT std::string StringPrintV(const char* format, va_list args);
 
 }  // namespace util
 }  // namespace vpd
