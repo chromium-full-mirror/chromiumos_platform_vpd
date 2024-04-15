@@ -18,7 +18,7 @@ extern "C" {
 #include <vector>
 
 #include "absl/log/log.h"
-#include "base/strings/string_util.h"
+#include "absl/strings/strip.h"
 #include "base/strings/stringprintf.h"
 
 #include "vpd/types.h"
@@ -43,7 +43,7 @@ int FlashromLog(enum flashrom_log_level level,
   // those, a LOG doesn't expect that.
   // NB: libflashrom also splits lines sometimes (and omits the newline), which
   // means we'll log a split line.
-  msg = base::TrimString(msg, "\n", base::TRIM_TRAILING);
+  msg = absl::StripSuffix(msg, "\n");
 
   if (level >= FLASHROM_MSG_INFO) {
     // Flashrom is still pretty noisy at INFO level.
