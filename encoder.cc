@@ -19,7 +19,8 @@
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "base/strings/string_number_conversions.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/string_view.h"
 
 extern "C" {
 #include "vpd/include/lib/checksum.h"
@@ -584,7 +585,9 @@ std::optional<std::map<std::string, std::string>> Encoder::Decode(
       ret.merge(*dict);
     } else {
       LOG(ERROR) << "unsupported UUID: "
-                 << base::HexEncode(data->uuid, sizeof(data->uuid));
+                 << absl::BytesToHexString(absl::string_view(
+                        reinterpret_cast<const char*>(data->uuid),
+                        sizeof(data->uuid)));
       return {};
     }
 
