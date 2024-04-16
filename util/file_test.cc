@@ -7,8 +7,10 @@
 #include <stdint.h>
 
 #include <optional>
+#include <set>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "gtest/gtest.h"
@@ -129,6 +131,58 @@ TEST_F(FileUtilTest, WriteFileTest_PathIsNotFile) {
 TEST_F(FileUtilTest, WriteFileTest_InvalidFileName) {
   EXPECT_FALSE(vpd::util::WriteFile("", "hello world"));
   EXPECT_FALSE(vpd::util::WriteFile(std::string({'\0'}), "hello world"));
+}
+
+TEST_F(FileUtilTest, ListFilesTest_NonEmptyDirectory) {
+  auto f1 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_1");
+  auto f2 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_2");
+  auto f3 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_3");
+  auto d1 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_d1");
+  auto d2 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_d2");
+  auto l1 = temp_dir_.GetPath().Append("ListFilesTest_NonEmptyDirectory_l1");
+  ASSERT_TRUE(base::WriteFile(f1, ""));
+  ASSERT_TRUE(base::WriteFile(f2, ""));
+  ASSERT_TRUE(base::WriteFile(f3, ""));
+  ASSERT_TRUE(base::CreateDirectory(d1));
+  ASSERT_TRUE(base::CreateDirectory(d2));
+  ASSERT_TRUE(base::CreateSymbolicLink(f1, l1));
+  ASSERT_TRUE(base::PathExists(f1));
+  ASSERT_TRUE(base::PathExists(f2));
+  ASSERT_TRUE(base::PathExists(f3));
+  ASSERT_TRUE(base::DirectoryExists(d1));
+  ASSERT_TRUE(base::DirectoryExists(d2));
+  ASSERT_TRUE(base::PathExists(l1));
+
+  std::set<std::string> want = {
+      f1.BaseName().value(),
+      f2.BaseName().value(),
+      f3.BaseName().value(),
+  };
+  auto got = vpd::util::ListFiles(temp_dir_.GetPath().value());
+  EXPECT_EQ(std::set<std::string>(got.begin(), got.end()), want);
+}
+
+TEST_F(FileUtilTest, ListFilesTest_EmptyDirectory) {
+  EXPECT_TRUE(vpd::util::ListFiles(temp_dir_.GetPath().value()).empty());
+}
+
+TEST_F(FileUtilTest, ListFilesTest_DirectoryNotExist) {
+  auto f = temp_dir_.GetPath().Append("ListFilesTest_DirectoryNotExist");
+  ASSERT_FALSE(base::PathExists(f));
+  EXPECT_TRUE(vpd::util::ListFiles(f.value()).empty());
+}
+
+TEST_F(FileUtilTest, ListFilesTest_PathIsNotDirectory) {
+  auto f = temp_dir_.GetPath().Append("ListFilesTest_PathIsNotDirectory");
+  ASSERT_TRUE(base::WriteFile(f, ""));
+  ASSERT_TRUE(base::PathExists(f));
+  ASSERT_FALSE(base::DirectoryExists(f));
+  EXPECT_TRUE(vpd::util::ListFiles(f.value()).empty());
+}
+
+TEST_F(FileUtilTest, ListFilesTest_InvalidPathName) {
+  EXPECT_TRUE(vpd::util::ListFiles("").empty());
+  EXPECT_TRUE(vpd::util::ListFiles(std::string({'\0'})).empty());
 }
 
 }  // namespace vpd

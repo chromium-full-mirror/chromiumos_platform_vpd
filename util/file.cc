@@ -4,6 +4,7 @@
 
 #include "vpd/util/file.h"
 
+#include <dirent.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,6 +13,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "absl/log/log.h"
 
 namespace vpd {
 namespace util {
@@ -61,6 +64,26 @@ bool WriteFile(const std::string& filename, const std::string& data) {
   file.close();
 
   return file.good();
+}
+
+std::vector<std::string> ListFiles(const std::string& dir) {
+  DIR* d = opendir(dir.c_str());
+  if (d == nullptr) {
+    LOG(ERROR) << "Error opening directory: " << dir;
+    return {};
+  }
+
+  std::vector<std::string> files;
+  struct dirent* entry = nullptr;
+  while ((entry = readdir(d)) != nullptr) {
+    // Check if the entry is a regular file (and not a directory, symlink, etc.)
+    if (entry->d_type == DT_REG) {
+      files.push_back(entry->d_name);
+    }
+  }
+
+  closedir(d);
+  return files;
 }
 
 }  // namespace util

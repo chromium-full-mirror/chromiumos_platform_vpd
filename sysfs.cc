@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "absl/log/log.h"
-#include "base/files/file_enumerator.h"
 
 #include "vpd/types.h"
 #include "vpd/util/file.h"
@@ -55,18 +54,17 @@ std::optional<std::string> Sysfs::GetValue(VpdRegion region,
 }
 
 std::vector<const KeyVal> Sysfs::GetValues(VpdRegion region) const {
-  base::FileEnumerator e(VpdRegionToSysfsPath(sysfs_dir_, region),
-                         false /* recursive */, base::FileEnumerator::FILES);
+  auto dir = VpdRegionToSysfsPath(sysfs_dir_, region);
   std::vector<const KeyVal> res;
 
-  for (base::FilePath key = e.Next(); !key.empty(); key = e.Next()) {
-    auto contents = vpd::util::ReadFileToString(key.AsUTF8Unsafe());
+  for (const std::string& key : vpd::util::ListFiles(dir.value())) {
+    auto contents = vpd::util::ReadFileToString(dir.value() + '/' + key);
     if (!contents) {
       PLOG(ERROR) << "Failed to read sysfs: " << key;
       continue;
     }
     res.push_back(KeyVal{
-        .key = key.BaseName().AsUTF8Unsafe(),
+        .key = key,
         .value = contents.value(),
     });
   }

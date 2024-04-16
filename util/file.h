@@ -23,6 +23,8 @@ EXPORT std::optional<std::string> ReadFileToString(const std::string& filename);
 
 EXPORT bool WriteFile(const std::string& filename, const std::string& data);
 
+EXPORT std::vector<std::string> ListFiles(const std::string& dir);
+
 }  // namespace util
 }  // namespace vpd
 
