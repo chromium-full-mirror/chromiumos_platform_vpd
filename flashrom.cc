@@ -17,7 +17,7 @@ extern "C" {
 #include <string>
 #include <vector>
 
-#include "base/logging.h"
+#include "absl/log/log.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 
@@ -47,7 +47,9 @@ int FlashromLog(enum flashrom_log_level level,
 
   if (level >= FLASHROM_MSG_INFO) {
     // Flashrom is still pretty noisy at INFO level.
-    VLOG(1) << msg;
+
+    // TODO(wdzeng): Uncomment this after we migrate to use absl-20240116.
+    // VLOG(1) << msg;
   } else if (level >= FLASHROM_MSG_WARN) {
     LOG(WARNING) << msg;
   } else {

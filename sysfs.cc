@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 
 #include "vpd/types.h"
 

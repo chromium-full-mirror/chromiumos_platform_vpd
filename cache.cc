@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "base/check.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/strings/stringprintf.h"
 
 #include "vpd/cache_file.h"

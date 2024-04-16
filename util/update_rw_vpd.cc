@@ -18,7 +18,7 @@
 
 #include <iostream>
 
-#include "base/logging.h"
+#include "absl/log/log.h"
 
 #include "vpd/util/update_rw_vpd.h"
 #include "vpd/vpd.h"

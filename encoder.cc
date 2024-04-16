@@ -17,8 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/check_op.h"
-#include "base/logging.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "base/strings/string_number_conversions.h"
 
 extern "C" {
@@ -361,7 +361,8 @@ std::optional<std::map<std::string, std::string>> DecodeBlob(
           return {};
         }
         ret[kv->key] = kv->value;
-        VLOG(1) << "Parsed: key = " << kv->key << ", value = " << kv->value;
+        // TODO(wdzeng): Uncomment this after we migrate to use absl-20240116.
+        // VLOG(1) << "Parsed: key = " << kv->key << ", value = " << kv->value;
         tracking = std::vector<uint8_t>(tracking.begin() + 1 + consumed,
                                         tracking.end());
         break;
@@ -567,12 +568,14 @@ std::optional<std::map<std::string, std::string>> Encoder::Decode(
     }
 
     if (!memcmp(data->uuid, spd_uuid, sizeof(data->uuid))) {
-      VLOG(1) << "Ignoring SPD";
+      // TODO(wdzeng): Uncomment this after we migrate to use absl-20240116.
+      // VLOG(1) << "Ignoring SPD";
     } else if (!memcmp(data->uuid, vpd_1_2_uuid, sizeof(data->uuid))) {
       LOG(ERROR) << "VPD 1.2 not supported";
       return {};
     } else if (!memcmp(data->uuid, vpd_2_0_uuid, sizeof(data->uuid))) {
-      VLOG(1) << "Found VPD 2.0 data";
+      // TODO(wdzeng): Uncomment this after we migrate to use absl-20240116.
+      // VLOG(1) << "Found VPD 2.0 data";
       auto dict =
           DecodeBlob(std::vector<uint8_t>(eps.begin() + offs, eps.end()));
       if (!dict) {

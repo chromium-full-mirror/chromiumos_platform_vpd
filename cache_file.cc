@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/strings/string_split.h"
 
 #include "vpd/types.h"
