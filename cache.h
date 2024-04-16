@@ -9,8 +9,8 @@
 #include <optional>
 #include <string>
 
-#include <base/files/file_path.h>
-#include <brillo/brillo_export.h>
+#include "base/files/file_path.h"
+#include "brillo/brillo_export.h"
 
 #include "vpd/cache_file.h"
 #include "vpd/flashrom.h"

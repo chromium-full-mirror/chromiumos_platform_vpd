@@ -5,14 +5,14 @@
 #ifndef ENCODER_H_
 #define ENCODER_H_
 
+#include <stdint.h>
+
 #include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <brillo/brillo_export.h>
-
-#include "lib/vpd.h"
+#include "brillo/brillo_export.h"
 
 namespace vpd {
 

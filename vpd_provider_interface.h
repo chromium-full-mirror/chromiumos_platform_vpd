@@ -9,6 +9,8 @@
 #include <optional>
 #include <string>
 
+#include "vpd/types.h"
+
 namespace vpd {
 
 // Class interface for the underlying VPD-providing implementation.

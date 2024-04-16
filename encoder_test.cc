@@ -2,16 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <array>
+#include <map>
+#include <optional>
 #include <string>
+#include <vector>
 
-#include <base/environment.h>
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <gtest/gtest.h>
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "gtest/gtest.h"
 
-#include "lib/vpd_decode.h"
-#include "lib/vpd_tables.h"
 #include "vpd/encoder.h"
+extern "C" {
+#include "vpd/include/lib/vpd.h"
+#include "vpd/include/lib/vpd_decode.h"
+#include "vpd/include/lib/vpd_tables.h"
+}  // extern "C"
 
 namespace vpd {
 

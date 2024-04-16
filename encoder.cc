@@ -4,23 +4,28 @@
 
 #include "vpd/encoder.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <uuid/uuid.h>
+
 #include <algorithm>
 #include <array>
-#include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <uuid/uuid.h>
+#include "base/check_op.h"
+#include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 
-#include <base/check_op.h>
-#include <base/logging.h>
-#include <base/strings/string_number_conversions.h>
-
-#include "lib/checksum.h"
-#include "lib/vpd.h"
-#include "lib/vpd_tables.h"
+extern "C" {
+#include "vpd/include/lib/checksum.h"
+#include "vpd/include/lib/vpd.h"
+#include "vpd/include/lib/vpd_tables.h"
+}  // extern "C"
 #include "vpd/types.h"
 
 namespace vpd {

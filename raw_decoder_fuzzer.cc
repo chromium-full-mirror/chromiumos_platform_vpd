@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "vpd/encoder.h"
+#include <stddef.h>
+#include <stdint.h>
 
-#include <cstdint>
 #include <vector>
 
-#include <base/logging.h>
+#include "base/logging.h"
+
+#include "vpd/encoder.h"
 
 namespace vpd {
 

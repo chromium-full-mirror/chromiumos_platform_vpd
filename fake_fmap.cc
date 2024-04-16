@@ -3,19 +3,21 @@
 // found in the LICENSE file.
 
 #include <fmap.h>
-
 extern "C" {
 #include <libflashrom.h>
 }  // extern "C"
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
-#include <string>
 #include <vector>
 
-#include <base/check.h>
-#include <base/files/file.h>
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
+#include "base/check.h"
+#include "base/check_op.h"
+#include "base/files/file.h"
+#include "base/logging.h"
+#include "base/strings/stringprintf.h"
 
 #include "vpd/fake_fmap.h"
 

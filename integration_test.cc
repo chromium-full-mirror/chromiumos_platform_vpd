@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <optional>
 #include <string>
 
-#include <base/environment.h>
-#include <base/files/file_util.h>
-#include <base/strings/stringprintf.h>
-#include <gtest/gtest.h>
+#include "base/environment.h"
+#include "base/files/file_path.h"
+#include "base/strings/stringprintf.h"
+#include "gtest/gtest.h"
 
 #include "vpd/encoder.h"
 #include "vpd/flashrom.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

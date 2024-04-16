@@ -2,18 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <vector>
 
-#include <base/files/file_path.h>
-#include <base/files/file_util.h>
-#include <base/files/scoped_temp_dir.h>
-#include <base/logging.h>
-#include <gtest/gtest.h>
+#include "base/check.h"
+#include "base/files/file_path.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/logging.h"
 
 #include "vpd/cache.h"
 #include "vpd/fake_fmap.h"
 #include "vpd/flashrom.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

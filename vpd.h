@@ -10,7 +10,7 @@
 #include <optional>
 #include <string>
 
-#include <brillo/brillo_export.h>
+#include "brillo/brillo_export.h"
 
 #include "vpd/types.h"
 

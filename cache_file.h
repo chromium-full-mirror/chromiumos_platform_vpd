@@ -5,11 +5,10 @@
 #ifndef CACHE_FILE_H_
 #define CACHE_FILE_H_
 
-#include <string>
 #include <vector>
 
-#include <base/files/file_path.h>
-#include <brillo/brillo_export.h>
+#include "base/files/file_path.h"
+#include "brillo/brillo_export.h"
 
 #include "vpd/types.h"
 

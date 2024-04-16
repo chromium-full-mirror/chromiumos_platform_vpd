@@ -4,21 +4,22 @@
 
 #include "vpd/cache.h"
 
+#include <stdint.h>
+
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <stdio.h>
-
-#include <base/check.h>
-#include <base/files/file_path.h>
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
+#include "base/check.h"
+#include "base/files/file_path.h"
+#include "base/logging.h"
+#include "base/strings/stringprintf.h"
 
 #include "vpd/cache_file.h"
 #include "vpd/encoder.h"
 #include "vpd/flashrom.h"
-#include "vpd/vpd.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

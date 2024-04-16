@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <array>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "vpd/fake_vpd.h"
 #include "vpd/util/update_rw_vpd.h"

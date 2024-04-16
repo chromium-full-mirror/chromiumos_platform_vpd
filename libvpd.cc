@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <string>
 
 #include "vpd/cache.h"

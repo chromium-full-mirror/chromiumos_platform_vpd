@@ -4,33 +4,35 @@
  * found in the LICENSE file.
  */
 
-#include <iostream>
-#include <optional>
-#include <string>
-
 #include <assert.h>
 #include <ctype.h>
 #include <fmap.h>
 #include <getopt.h>
-#include <inttypes.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <base/strings/stringprintf.h>
+#include <iostream>
+#include <map>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
-extern "C" {
-#include "lib/lib_vpd.h"
-#include "lib/vpd.h"
-#include "lib/vpd_tables.h"
-};
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/strings/stringprintf.h"
 
 #include "vpd/cache.h"
 #include "vpd/encoder.h"
 #include "vpd/flashrom.h"
+extern "C" {
+#include "vpd/include/lib/lib_vpd.h"
+}  // extern "C"
+#include "vpd/types.h"
 
 namespace {
 

@@ -14,13 +14,16 @@
 #ifndef FLASHROM_H_
 #define FLASHROM_H_
 
+extern "C" {
+#include <libflashrom.h>
+}  // extern "C"
 #include <stdint.h>
 
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <brillo/brillo_export.h>
+#include "brillo/brillo_export.h"
 
 #include "vpd/types.h"
 

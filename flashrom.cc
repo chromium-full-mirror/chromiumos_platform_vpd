@@ -2,20 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "vpd/flashrom.h"
+
+#include <assert.h>
 extern "C" {
 #include <libflashrom.h>
 }  // extern "C"
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
-#include <cassert>
 #include <optional>
 #include <string>
+#include <vector>
 
-#include <base/logging.h>
-#include <base/strings/string_util.h>
-#include <base/strings/stringprintf.h>
+#include "base/logging.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 
-#include "vpd/flashrom.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

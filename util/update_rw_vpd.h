@@ -12,8 +12,8 @@
 #include <optional>
 #include <string>
 
-#include <base/logging.h>
-#include <base/strings/string_util.h>
+#include "base/logging.h"
+#include "base/strings/string_util.h"
 
 #include "vpd/vpd.h"
 

@@ -17,9 +17,8 @@
 // Example usage: update_rw_vpd block_devmode 1 check_enrollment 0
 
 #include <iostream>
-#include <string>
 
-#include <base/logging.h>
+#include "base/logging.h"
 
 #include "vpd/util/update_rw_vpd.h"
 #include "vpd/vpd.h"

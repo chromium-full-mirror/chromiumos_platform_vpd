@@ -8,13 +8,12 @@
 #include <string>
 #include <vector>
 
-#include <base/check.h>
-#include <base/files/file_enumerator.h>
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <base/notreached.h>
+#include "base/files/file_enumerator.h"
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/notreached.h"
 
-#include "vpd/vpd.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

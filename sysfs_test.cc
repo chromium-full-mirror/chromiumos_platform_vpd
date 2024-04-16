@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 
 #include <algorithm>
-#include <string>
-#include <vector>
+#include <optional>
 
-#include <base/files/file_util.h>
-#include <base/files/scoped_temp_dir.h>
-#include <base/logging.h>
-#include <gtest/gtest.h>
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "gtest/gtest.h"
 
 #include "vpd/sysfs.h"
+#include "vpd/types.h"
 
 namespace vpd {
 

@@ -4,12 +4,16 @@
 
 #include "vpd/cache_file.h"
 
+#include <string>
 #include <vector>
 
-#include <base/files/file_util.h>
-#include <base/logging.h>
-#include <base/notreached.h>
-#include <base/strings/string_split.h>
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/logging.h"
+#include "base/notreached.h"
+#include "base/strings/string_split.h"
+
+#include "vpd/types.h"
 
 namespace vpd {
 
