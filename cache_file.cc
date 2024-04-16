@@ -80,7 +80,7 @@ bool CacheFile::Write(const std::vector<const KeyVal>& kvs) const {
     data += kv.key + "=\"" + kv.value + "\"\n";
   }
 
-  if (!base::WriteFile(path_, data)) {
+  if (!vpd::util::WriteFile(path_.AsUTF8Unsafe(), data)) {
     PLOG(ERROR) << "failed to write to " << path_;
     return false;
   }

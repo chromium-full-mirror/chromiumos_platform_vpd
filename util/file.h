@@ -21,6 +21,8 @@ EXPORT std::optional<std::vector<uint8_t>> ReadFileToBytes(
 
 EXPORT std::optional<std::string> ReadFileToString(const std::string& filename);
 
+EXPORT bool WriteFile(const std::string& filename, const std::string& data);
+
 }  // namespace util
 }  // namespace vpd
 

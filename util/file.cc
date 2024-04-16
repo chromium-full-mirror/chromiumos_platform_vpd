@@ -50,5 +50,18 @@ std::optional<std::string> ReadFileToString(const std::string& filename) {
   return buffer.str();
 }
 
+bool WriteFile(const std::string& filename, const std::string& data) {
+  std::ofstream file(filename, std::ios::out);
+
+  if (!file.is_open()) {
+    return false;
+  }
+
+  file << data;
+  file.close();
+
+  return file.good();
+}
+
 }  // namespace util
 }  // namespace vpd

@@ -77,4 +77,58 @@ TEST_F(FileUtilTest, ReadFileToStringTest_FileNotExist) {
   EXPECT_FALSE(vpd::util::ReadFileToString(file_path.value()));
 }
 
+TEST_F(FileUtilTest, WriteFileTest_RegularContent) {
+  std::string test_cases[] = {
+      "hello world",
+      "foo\nbar\n",
+  };
+  auto file_path = temp_dir_.GetPath().Append("WriteFileTest_RegularContent");
+
+  for (const std::string& tc : test_cases) {
+    EXPECT_TRUE(vpd::util::WriteFile(file_path.value(), tc));
+    std::string buf;
+    EXPECT_TRUE(base::ReadFileToString(file_path, &buf));
+    EXPECT_EQ(buf, tc);
+  }
+}
+
+TEST_F(FileUtilTest, WriteFileTest_EmptyContent) {
+  auto file_path = temp_dir_.GetPath().Append("WriteFileTest_EmptyContent");
+  EXPECT_TRUE(vpd::util::WriteFile(file_path.value(), ""));
+
+  std::string buf;
+  EXPECT_TRUE(base::ReadFileToString(file_path, &buf));
+  EXPECT_EQ(buf, "");
+}
+
+TEST_F(FileUtilTest, WriteFileTest_BinaryContent) {
+  std::string test_cases[] = {
+      // Regular binary data.
+      "\x0a\x0b\x0c",
+      // The NULL char is written.
+      std::string({'\0'}),
+      // The contents after NULL char are written.
+      std::string({'\0', '\1', '\2', '\3'}),
+  };
+  auto file_path = temp_dir_.GetPath().Append("WriteFileTest_BinaryContent");
+
+  for (const std::string& tc : test_cases) {
+    EXPECT_TRUE(vpd::util::WriteFile(file_path.value(), tc));
+    auto buf = base::ReadFileToBytes(file_path);
+    EXPECT_TRUE(buf.has_value());
+    EXPECT_EQ(buf, std::vector<uint8_t>(tc.begin(), tc.end()));
+  }
+}
+
+TEST_F(FileUtilTest, WriteFileTest_PathIsNotFile) {
+  EXPECT_TRUE(base::DirectoryExists(temp_dir_.GetPath()));
+  EXPECT_FALSE(
+      vpd::util::WriteFile(temp_dir_.GetPath().value(), "hello world"));
+}
+
+TEST_F(FileUtilTest, WriteFileTest_InvalidFileName) {
+  EXPECT_FALSE(vpd::util::WriteFile("", "hello world"));
+  EXPECT_FALSE(vpd::util::WriteFile(std::string({'\0'}), "hello world"));
+}
+
 }  // namespace vpd
