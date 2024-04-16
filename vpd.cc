@@ -22,9 +22,9 @@
 #include <vector>
 
 #include "absl/log/log.h"
+#include "absl/strings/str_format.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/strings/stringprintf.h"
 
 #include "vpd/cache.h"
 #include "vpd/encoder.h"
@@ -505,8 +505,8 @@ int main(int argc, char* argv[]) {
         break;
 
       default:
-        LOG(ERROR) << base::StringPrintf("Invalid option '%c' (%s)", opt,
-                                         optarg ? optarg : "<no argument>");
+        LOG(ERROR) << absl::StrFormat("Invalid option '{%c}' ({%s})", opt,
+                                      optarg ? optarg : "<no argument>");
         usage(argv[0]);
         return VPD_ERR_SYNTAX;
     }
