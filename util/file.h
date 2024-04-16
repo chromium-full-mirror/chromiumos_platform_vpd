@@ -19,6 +19,8 @@ namespace util {
 EXPORT std::optional<std::vector<uint8_t>> ReadFileToBytes(
     const std::string& filename);
 
+EXPORT std::optional<std::string> ReadFileToString(const std::string& filename);
+
 }  // namespace util
 }  // namespace vpd
 

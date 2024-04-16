@@ -10,9 +10,9 @@
 
 #include "absl/log/log.h"
 #include "base/files/file_enumerator.h"
-#include "base/files/file_util.h"
 
 #include "vpd/types.h"
+#include "vpd/util/file.h"
 
 namespace vpd {
 
@@ -35,8 +35,8 @@ std::optional<std::string> VpdSysfsRead(const base::FilePath& region_dir,
                                         const std::string& key) {
   base::FilePath path = region_dir.Append(key);
 
-  std::string contents;
-  if (!base::ReadFileToString(path, &contents)) {
+  auto contents = vpd::util::ReadFileToString(path.value());
+  if (!contents) {
     return {};
   }
 
@@ -60,14 +60,14 @@ std::vector<const KeyVal> Sysfs::GetValues(VpdRegion region) const {
   std::vector<const KeyVal> res;
 
   for (base::FilePath key = e.Next(); !key.empty(); key = e.Next()) {
-    std::string contents;
-    if (!base::ReadFileToString(key, &contents)) {
+    auto contents = vpd::util::ReadFileToString(key.AsUTF8Unsafe());
+    if (!contents) {
       PLOG(ERROR) << "Failed to read sysfs: " << key;
       continue;
     }
     res.push_back(KeyVal{
         .key = key.BaseName().AsUTF8Unsafe(),
-        .value = contents,
+        .value = contents.value(),
     });
   }
 

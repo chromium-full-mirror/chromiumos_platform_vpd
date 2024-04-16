@@ -50,4 +50,31 @@ TEST_F(FileUtilTest, ReadFileToBytesTest_FileNotExist) {
   EXPECT_FALSE(vpd::util::ReadFileToBytes(file_path.value()));
 }
 
+TEST_F(FileUtilTest, ReadFileToStringTest_RegularContent) {
+  auto file_path =
+      temp_dir_.GetPath().Append("ReadFileToStringTest_RegularContent");
+  ASSERT_TRUE(base::WriteFile(file_path, "hello world"));
+
+  auto buf = vpd::util::ReadFileToString(file_path.value());
+  EXPECT_TRUE(buf.has_value());
+  EXPECT_EQ(buf, "hello world");
+}
+
+TEST_F(FileUtilTest, ReadFileToStringTest_EmptyContent) {
+  auto file_path =
+      temp_dir_.GetPath().Append("ReadFileToStringTest_EmptyContent");
+  ASSERT_TRUE(base::WriteFile(file_path, ""));
+
+  auto buf = vpd::util::ReadFileToString(file_path.value());
+  EXPECT_TRUE(buf.has_value());
+  EXPECT_EQ(buf, "");
+}
+
+TEST_F(FileUtilTest, ReadFileToStringTest_FileNotExist) {
+  auto file_path =
+      temp_dir_.GetPath().Append("ReadFileToStringTest_FileNotExist");
+  ASSERT_FALSE(base::PathExists(file_path));
+  EXPECT_FALSE(vpd::util::ReadFileToString(file_path.value()));
+}
+
 }  // namespace vpd

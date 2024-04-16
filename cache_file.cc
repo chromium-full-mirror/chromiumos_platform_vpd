@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 
 #include "vpd/types.h"
+#include "vpd/util/file.h"
 #include "vpd/util/string.h"
 
 namespace vpd {
@@ -44,14 +45,14 @@ bool CacheFile::Exists() const {
 }
 
 bool CacheFile::Read(std::vector<const KeyVal>* kv) const {
-  std::string data;
-  if (!base::ReadFileToString(path_, &data)) {
+  auto data = vpd::util::ReadFileToString(path_.value());
+  if (!data) {
     LOG(ERROR) << "Failed to read cache file: " << path_;
     return false;
   }
 
   std::vector<std::pair<std::string, std::string>> pairs;
-  if (!vpd::util::GetKeyValuePairsFromLines(data, pairs)) {
+  if (!vpd::util::GetKeyValuePairsFromLines(data.value(), pairs)) {
     LOG(ERROR) << "Failed to parse cache file: " << path_;
     return false;
   }
