@@ -9,15 +9,14 @@
 #include <optional>
 #include <string>
 
-#include "brillo/brillo_export.h"
-
+#include "vpd/export.h"
 #include "vpd/types.h"
 #include "vpd/vpd_provider_interface.h"
 
 namespace vpd {
 
 // A fake VPD implementation, for tests.
-class BRILLO_EXPORT FakeVpd : public VpdProviderInterface {
+class EXPORT FakeVpd : public VpdProviderInterface {
  public:
   FakeVpd() {}
 

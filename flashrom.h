@@ -23,13 +23,12 @@ extern "C" {
 #include <string>
 #include <vector>
 
-#include "brillo/brillo_export.h"
-
+#include "vpd/export.h"
 #include "vpd/types.h"
 
 namespace vpd {
 
-class BRILLO_EXPORT Flashrom {
+class EXPORT Flashrom {
  public:
   Flashrom() : Flashrom("internal", "") {}
   Flashrom(std::string programmer, std::string params)

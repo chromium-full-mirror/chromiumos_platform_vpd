@@ -8,13 +8,13 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "brillo/brillo_export.h"
 
+#include "vpd/export.h"
 #include "vpd/types.h"
 
 namespace vpd {
 
-class BRILLO_EXPORT CacheFile {
+class EXPORT CacheFile {
  public:
   explicit CacheFile(VpdRegion region);
   CacheFile(VpdRegion region, const base::FilePath& cacheDir);

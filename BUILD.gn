@@ -88,12 +88,12 @@ install_config("install_sbin_scripts") {
 
 install_config("install_libvpd_headers") {
   sources = [
+    "export.h",
     "fake_vpd.h",
     "types.h",
     "vpd.h",
     "vpd_provider_interface.h",
   ]
-
   install_path = "/usr/include/vpd"
 }
 

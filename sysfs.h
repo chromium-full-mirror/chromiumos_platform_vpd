@@ -10,13 +10,13 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "brillo/brillo_export.h"
 
+#include "vpd/export.h"
 #include "vpd/types.h"
 
 namespace vpd {
 
-class BRILLO_EXPORT Sysfs {
+class EXPORT Sysfs {
  public:
   Sysfs();
   explicit Sysfs(const base::FilePath& sysfs_dir);

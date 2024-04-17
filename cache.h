@@ -10,9 +10,9 @@
 #include <string>
 
 #include "base/files/file_path.h"
-#include "brillo/brillo_export.h"
 
 #include "vpd/cache_file.h"
+#include "vpd/export.h"
 #include "vpd/flashrom.h"
 #include "vpd/sysfs.h"
 #include "vpd/types.h"
@@ -22,7 +22,7 @@ namespace vpd {
 
 // A VPD implementation that utilizes a tmpfs cache, and writes back to the
 // flash.
-class BRILLO_EXPORT Cache : public VpdProviderInterface {
+class EXPORT Cache : public VpdProviderInterface {
  public:
   Cache() {}
   // Only for tests.

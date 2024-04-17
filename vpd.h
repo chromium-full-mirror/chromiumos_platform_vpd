@@ -10,15 +10,14 @@
 #include <optional>
 #include <string>
 
-#include "brillo/brillo_export.h"
-
+#include "vpd/export.h"
 #include "vpd/types.h"
 
 namespace vpd {
 
 class VpdProviderInterface;
 
-class BRILLO_EXPORT Vpd {
+class EXPORT Vpd {
  public:
   Vpd();
   // For tests, to provide a fake.

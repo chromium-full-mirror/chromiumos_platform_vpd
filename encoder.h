@@ -12,11 +12,11 @@
 #include <string>
 #include <vector>
 
-#include "brillo/brillo_export.h"
+#include "vpd/export.h"
 
 namespace vpd {
 
-class BRILLO_EXPORT Encoder {
+class EXPORT Encoder {
  public:
   struct EncodingParams {
     // Offset of the VPD region within the flash.
