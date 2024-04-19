@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <vector>
 
 #include "base/check.h"
@@ -24,11 +25,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   base::ScopedTempDir temp_dir;
   CHECK(temp_dir.CreateUniqueTempDir());
-  base::FilePath cache_file(temp_dir.GetPath().Append("ro.txt"));
-  CHECK(base::WriteFile(cache_file, std::vector<uint8_t>(data, data + size)));
+  base::FilePath cache_file_path(temp_dir.GetPath().Append("ro.txt"));
+  CHECK(base::WriteFile(cache_file_path,
+                        std::vector<uint8_t>(data, data + size)));
 
-  std::vector<const KeyVal> kv;
-  CacheFile(VpdRo, temp_dir.GetPath().value()).Read(&kv);
+  CacheFile cache_file(VpdRo, temp_dir.GetPath().value());
+  std::optional<std::vector<KeyVal>> kv = cache_file.Read();
 
   return 0;
 }

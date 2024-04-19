@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,7 +49,7 @@ TEST_F(CacheFileTest, Exists) {
 TEST_F(CacheFileTest, Read) {
   struct expectation {
     std::string contents;
-    std::vector<const KeyVal> kvs;
+    std::vector<KeyVal> kvs;
     bool expect_success;
   };
   std::array<expectation, 5> expectations = {
@@ -106,17 +107,17 @@ TEST_F(CacheFileTest, Read) {
     CacheFile cache(VpdRo, base_dir_.value());
 
     base::WriteFile(base_dir_.Append("ro.txt"), expect.contents);
-    std::vector<const KeyVal> result;
-    EXPECT_EQ(cache.Read(&result), expect.expect_success);
+    std::optional<std::vector<KeyVal>> result = cache.Read();
+    EXPECT_EQ(result.has_value(), expect.expect_success);
     if (expect.expect_success) {
-      EXPECT_EQ(result, expect.kvs);
+      EXPECT_EQ(result.value(), expect.kvs);
     }
   }
 }
 
 TEST_F(CacheFileTest, Write) {
   struct expectation {
-    std::vector<const KeyVal> kvs;
+    std::vector<KeyVal> kvs;
     std::string contents;
   };
   std::array<expectation, 3> expectations = {
@@ -170,8 +171,8 @@ TEST_F(CacheFileTest, Write) {
 }
 
 TEST_F(CacheFileTest, Bidirectional) {
-  std::array<std::vector<const KeyVal>, 3> kvs = {
-      std::vector<const KeyVal>(),
+  std::array<std::vector<KeyVal>, 3> kvs = {
+      std::vector<KeyVal>(),
       {
           {
               .key = "foo",
@@ -197,8 +198,8 @@ TEST_F(CacheFileTest, Bidirectional) {
   for (const auto& kv : kvs) {
     CacheFile cache(VpdRw, base_dir_.value());
     EXPECT_TRUE(cache.Write(kv));
-    std::vector<const KeyVal> result;
-    EXPECT_TRUE(cache.Read(&result));
+    std::optional<std::vector<KeyVal>> result = cache.Read();
+    EXPECT_TRUE(result.has_value());
     EXPECT_EQ(kv, result);
   }
 }

@@ -53,9 +53,9 @@ std::optional<std::string> Sysfs::GetValue(VpdRegion region,
   return VpdSysfsRead(VpdRegionToSysfsPath(sysfs_dir_, region), key);
 }
 
-std::vector<const KeyVal> Sysfs::GetValues(VpdRegion region) const {
+std::vector<KeyVal> Sysfs::GetValues(VpdRegion region) const {
   auto dir = VpdRegionToSysfsPath(sysfs_dir_, region);
-  std::vector<const KeyVal> res;
+  std::vector<KeyVal> res;
 
   for (const std::string& key : vpd::util::ListFiles(dir)) {
     auto contents = vpd::util::ReadFileToString(vpd::util::JoinPath(dir, key));

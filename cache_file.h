@@ -5,6 +5,7 @@
 #ifndef CACHE_FILE_H_
 #define CACHE_FILE_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,8 +19,8 @@ class EXPORT CacheFile {
   explicit CacheFile(VpdRegion region);
   CacheFile(VpdRegion region, const std::string& cacheDir);
   bool Exists() const;
-  bool Read(std::vector<const KeyVal>* kv) const;
-  bool Write(const std::vector<const KeyVal>& kv) const;
+  std::optional<std::vector<KeyVal>> Read() const;
+  bool Write(const std::vector<KeyVal>& kv) const;
 
  private:
   std::string path_;

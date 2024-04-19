@@ -24,9 +24,8 @@ namespace vpd {
 
 namespace {
 
-std::vector<const KeyVal> MapToVector(
-    const std::map<std::string, std::string>& map) {
-  std::vector<const KeyVal> res;
+std::vector<KeyVal> MapToVector(const std::map<std::string, std::string>& map) {
+  std::vector<KeyVal> res;
   res.reserve(map.size());
   for (const auto& kv : map) {
     res.push_back(KeyVal{
@@ -54,10 +53,12 @@ Cache::~Cache() {}
 
 // Pull key/value map from either the cache file or from sysfs.
 std::map<std::string, std::string> Cache::ReadValues(VpdRegion region) const {
-  std::vector<const KeyVal> pairs;
+  std::vector<KeyVal> pairs;
 
   if (cache_file_.at(region).Exists()) {
-    CHECK(cache_file_.at(region).Read(&pairs));
+    std::optional<std::vector<KeyVal>> r = cache_file_.at(region).Read();
+    CHECK(r.has_value());
+    pairs.swap(r.value());
   } else {
     pairs = sysfs_.GetValues(region);
   }

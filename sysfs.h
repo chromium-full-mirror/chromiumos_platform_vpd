@@ -22,7 +22,7 @@ class EXPORT Sysfs {
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const;
 
-  std::vector<const KeyVal> GetValues(VpdRegion region) const;
+  std::vector<KeyVal> GetValues(VpdRegion region) const;
 
  private:
   std::string sysfs_dir_;

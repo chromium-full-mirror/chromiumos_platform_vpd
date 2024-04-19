@@ -4,6 +4,7 @@
 
 #include "vpd/cache_file.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,36 +43,37 @@ bool CacheFile::Exists() const {
   return vpd::util::PathExists(path_);
 }
 
-bool CacheFile::Read(std::vector<const KeyVal>* kv) const {
+std::optional<std::vector<KeyVal>> CacheFile::Read() const {
   auto data = vpd::util::ReadFileToString(path_);
   if (!data) {
     LOG(ERROR) << "Failed to read cache file: " << path_;
-    return false;
+    return std::nullopt;
   }
 
   std::vector<std::pair<std::string, std::string>> pairs;
   if (!vpd::util::GetKeyValuePairsFromLines(data.value(), pairs)) {
     LOG(ERROR) << "Failed to parse cache file: " << path_;
-    return false;
+    return std::nullopt;
   }
 
+  std::vector<KeyVal> ret;
   for (auto& pair : pairs) {
     const std::string& val = pair.second;
 
     if (val.size() < 2 || val[0] != '"' || val[val.size() - 1] != '"') {
       LOG(ERROR) << "Unquoted value entry: " << val;
-      return false;
+      return std::nullopt;
     }
-    kv->push_back((KeyVal){
+    ret.push_back({
         .key = pair.first,
         .value = std::string(val.begin() + 1, val.end() - 1),
     });
   }
 
-  return true;
+  return ret;
 }
 
-bool CacheFile::Write(const std::vector<const KeyVal>& kvs) const {
+bool CacheFile::Write(const std::vector<KeyVal>& kvs) const {
   std::string data;
 
   for (const auto& kv : kvs) {
