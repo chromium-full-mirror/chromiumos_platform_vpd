@@ -106,8 +106,6 @@ default_pkg_deps = [
   "absl",
   "flashrom",
   "fmap",
-  "libbrillo",
-  "libchrome",
   "uuid",
 ]
 
@@ -134,7 +132,11 @@ shared_library("libvpd") {
 
 if (use.test) {
   pkg_config("test_config") {
-    pkg_deps = [ "libchrome-test" ]
+    pkg_deps = [
+      "libbrillo",
+      "libchrome",
+      "libchrome-test",
+    ]
   }
 
   executable("vpd_c_test") {
@@ -195,11 +197,19 @@ if (use.test) {
 }
 
 if (use.fuzzer) {
+  pkg_config("fuzzer_config") {
+    pkg_deps = [
+      "libbrillo",
+      "libchrome",
+    ]
+  }
+
   executable("vpd_cache_file_fuzzer") {
     sources = [ "cache_file_fuzzer.cc" ]
     configs += [
       "//common-mk/common_fuzzer",
       ":target_defaults",
+      ":fuzzer_config",
     ]
     include_dirs = [ "include" ]
     deps = [ ":libvpd" ]
@@ -212,6 +222,7 @@ if (use.fuzzer) {
     configs += [
       "//common-mk/common_fuzzer",
       ":target_defaults",
+      ":fuzzer_config",
     ]
     include_dirs = [ "include" ]
     deps = [ ":libvpd" ]
@@ -221,6 +232,7 @@ if (use.fuzzer) {
     configs += [
       "//common-mk/common_fuzzer",
       ":target_defaults",
+      ":fuzzer_config",
     ]
     include_dirs = [ "include" ]
     deps = [ ":libvpd" ]
@@ -230,6 +242,7 @@ if (use.fuzzer) {
     configs += [
       "//common-mk/common_fuzzer",
       ":target_defaults",
+      ":fuzzer_config",
     ]
     include_dirs = [ "include" ]
     deps = [ ":libvpd" ]
