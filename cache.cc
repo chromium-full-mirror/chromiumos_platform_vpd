@@ -14,7 +14,6 @@
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
-#include "base/files/file_path.h"
 
 #include "vpd/cache_file.h"
 #include "vpd/encoder.h"
@@ -40,12 +39,12 @@ std::vector<const KeyVal> MapToVector(
 
 }  // namespace
 
-Cache::Cache(const base::FilePath& fake_flash_path,
+Cache::Cache(const std::string& fake_flash_path,
              unsigned int size,
-             const base::FilePath& cache_dir)
+             const std::string& cache_dir)
     : programmer_args_(absl::StrFormat("emulate=VARIABLE_SIZE,size=%u,image=%s",
                                        size,
-                                       fake_flash_path.value().c_str())),
+                                       fake_flash_path.c_str())),
       cache_file_({
           {VpdRo, CacheFile(VpdRo, cache_dir)},
           {VpdRw, CacheFile(VpdRw, cache_dir)},

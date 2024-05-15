@@ -32,7 +32,7 @@ TEST_F(SysfsTest, GetValue) {
   ASSERT_TRUE(base::WriteFile(sysfs_dir_.Append("ro").Append("foo"), "bar"));
   ASSERT_TRUE(base::WriteFile(sysfs_dir_.Append("rw").Append("baz"), ""));
 
-  Sysfs sysfs(sysfs_dir_);
+  Sysfs sysfs(sysfs_dir_.value());
 
   EXPECT_EQ(*sysfs.GetValue(VpdRo, "foo"), "bar");
   EXPECT_EQ(*sysfs.GetValue(VpdRw, "baz"), "");
@@ -47,7 +47,7 @@ TEST_F(SysfsTest, GetValues) {
       base::WriteFile(sysfs_dir_.Append("ro").Append("another"), "entry"));
   ASSERT_TRUE(base::WriteFile(sysfs_dir_.Append("rw").Append("baz"), ""));
 
-  Sysfs sysfs(sysfs_dir_);
+  Sysfs sysfs(sysfs_dir_.value());
 
   auto ro = sysfs.GetValues(VpdRo);
   auto rw = sysfs.GetValues(VpdRw);

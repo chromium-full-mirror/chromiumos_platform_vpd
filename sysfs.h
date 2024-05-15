@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/files/file_path.h"
-
 #include "vpd/export.h"
 #include "vpd/types.h"
 
@@ -19,7 +17,7 @@ namespace vpd {
 class EXPORT Sysfs {
  public:
   Sysfs();
-  explicit Sysfs(const base::FilePath& sysfs_dir);
+  explicit Sysfs(const std::string& sysfs_dir);
 
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const;
@@ -27,7 +25,7 @@ class EXPORT Sysfs {
   std::vector<const KeyVal> GetValues(VpdRegion region) const;
 
  private:
-  base::FilePath sysfs_dir_;
+  std::string sysfs_dir_;
 };
 
 }  // namespace vpd

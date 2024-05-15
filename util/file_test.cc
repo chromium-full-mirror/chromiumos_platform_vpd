@@ -208,4 +208,34 @@ TEST_F(FileUtilTest, PathExistsTest_InvalidPathName) {
   EXPECT_FALSE(vpd::util::PathExists(std::string({'\0'})));
 }
 
+TEST_F(FileUtilTest, JoinPathTest) {
+  EXPECT_EQ(vpd::util::JoinPath("/", "foo"), "/foo");
+  EXPECT_EQ(vpd::util::JoinPath("/", "/foo"), "/foo");
+  EXPECT_EQ(vpd::util::JoinPath("/foo", "bar"), "/foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("/foo", "/bar"), "/foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/", "bar"), "/foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/", "/bar"), "/foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/bar", "baz"), "/foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/bar", "/baz"), "/foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/bar/", "baz"), "/foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/bar/", "/baz"), "/foo/bar/baz");
+
+  EXPECT_EQ(vpd::util::JoinPath("foo", "bar"), "foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("foo", "/bar"), "foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("foo/", "bar"), "foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("foo/", "/bar"), "foo/bar");
+  EXPECT_EQ(vpd::util::JoinPath("foo/bar", "baz"), "foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("foo/bar", "/baz"), "foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("foo/bar/", "baz"), "foo/bar/baz");
+  EXPECT_EQ(vpd::util::JoinPath("foo/bar/", "/baz"), "foo/bar/baz");
+
+  EXPECT_EQ(vpd::util::JoinPath("", ""), "");
+  EXPECT_EQ(vpd::util::JoinPath("", "foo"), "foo");
+  EXPECT_EQ(vpd::util::JoinPath("", "/foo"), "foo");
+  EXPECT_EQ(vpd::util::JoinPath("/foo", ""), "/foo");
+  EXPECT_EQ(vpd::util::JoinPath("foo", ""), "foo");
+  EXPECT_EQ(vpd::util::JoinPath("foo/", ""), "foo");
+  EXPECT_EQ(vpd::util::JoinPath("/foo/", ""), "/foo");
+}
+
 }  // namespace vpd

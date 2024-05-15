@@ -28,7 +28,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   CHECK(base::WriteFile(cache_file, std::vector<uint8_t>(data, data + size)));
 
   std::vector<const KeyVal> kv;
-  CacheFile(VpdRo, temp_dir.GetPath()).Read(&kv);
+  CacheFile(VpdRo, temp_dir.GetPath().value()).Read(&kv);
 
   return 0;
 }

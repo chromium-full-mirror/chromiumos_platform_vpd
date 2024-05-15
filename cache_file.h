@@ -5,9 +5,8 @@
 #ifndef CACHE_FILE_H_
 #define CACHE_FILE_H_
 
+#include <string>
 #include <vector>
-
-#include "base/files/file_path.h"
 
 #include "vpd/export.h"
 #include "vpd/types.h"
@@ -17,13 +16,13 @@ namespace vpd {
 class EXPORT CacheFile {
  public:
   explicit CacheFile(VpdRegion region);
-  CacheFile(VpdRegion region, const base::FilePath& cacheDir);
+  CacheFile(VpdRegion region, const std::string& cacheDir);
   bool Exists() const;
   bool Read(std::vector<const KeyVal>* kv) const;
   bool Write(const std::vector<const KeyVal>& kv) const;
 
  private:
-  base::FilePath path_;
+  std::string path_;
 };
 
 }  // namespace vpd

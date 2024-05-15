@@ -29,7 +29,7 @@ class CacheFileTest : public ::testing::Test {
 
 TEST_F(CacheFileTest, Exists) {
   {
-    CacheFile cache(VpdRo, base_dir_);
+    CacheFile cache(VpdRo, base_dir_.value());
 
     ASSERT_FALSE(cache.Exists());
     std::string data = "";
@@ -37,7 +37,7 @@ TEST_F(CacheFileTest, Exists) {
     ASSERT_TRUE(cache.Exists());
   }
   {
-    CacheFile cache(VpdRw, base_dir_);
+    CacheFile cache(VpdRw, base_dir_.value());
     ASSERT_FALSE(cache.Exists());
     std::string data = "";
     base::WriteFile(base_dir_.Append("rw.txt"), data);
@@ -103,7 +103,7 @@ TEST_F(CacheFileTest, Read) {
   };
 
   for (const auto& expect : expectations) {
-    CacheFile cache(VpdRo, base_dir_);
+    CacheFile cache(VpdRo, base_dir_.value());
 
     base::WriteFile(base_dir_.Append("ro.txt"), expect.contents);
     std::vector<const KeyVal> result;
@@ -160,7 +160,7 @@ TEST_F(CacheFileTest, Write) {
   };
 
   for (const auto& expect : expectations) {
-    CacheFile cache(VpdRo, base_dir_);
+    CacheFile cache(VpdRo, base_dir_.value());
 
     EXPECT_TRUE(cache.Write(expect.kvs));
     std::string data;
@@ -195,7 +195,7 @@ TEST_F(CacheFileTest, Bidirectional) {
   };
 
   for (const auto& kv : kvs) {
-    CacheFile cache(VpdRw, base_dir_);
+    CacheFile cache(VpdRw, base_dir_.value());
     EXPECT_TRUE(cache.Write(kv));
     std::vector<const KeyVal> result;
     EXPECT_TRUE(cache.Read(&result));

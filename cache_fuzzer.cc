@@ -38,7 +38,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   flashrom.Write(VpdRo, std::vector<uint8_t>(data, data + size));
 
   // Fire away!
-  auto cache = Cache(flash_path, flash_size, temp_dir.GetPath());
+  Cache cache(flash_path.value(), flash_size, temp_dir.GetPath().value());
   auto dict = cache.GetValues(VpdRo);
 
   // A valid dict is all we're looking for.

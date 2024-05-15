@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 
 namespace vpd {
@@ -89,6 +90,17 @@ std::vector<std::string> ListFiles(const std::string& dir) {
 
 bool PathExists(const std::string& path) {
   return access(path.c_str(), F_OK) == 0;
+}
+
+std::string JoinPath(const std::string& dir, const std::string& basename) {
+  if (basename.empty()) {
+    return (!dir.empty() && dir.back() == '/') ? dir.substr(0, dir.size() - 1)
+                                               : dir;
+  }
+
+  auto d = (dir.empty() || dir.back() == '/') ? dir : (dir + '/');
+  auto b = basename[0] == '/' ? basename.substr(1) : basename;
+  return d + b;
 }
 
 }  // namespace util

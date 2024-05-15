@@ -9,8 +9,6 @@
 #include <optional>
 #include <string>
 
-#include "base/files/file_path.h"
-
 #include "vpd/cache_file.h"
 #include "vpd/export.h"
 #include "vpd/flashrom.h"
@@ -26,9 +24,9 @@ class EXPORT Cache : public VpdProviderInterface {
  public:
   Cache() {}
   // Only for tests.
-  Cache(const base::FilePath& fake_flash_path,
+  Cache(const std::string& fake_flash_path,
         unsigned int size,
-        const base::FilePath& cache_dir);
+        const std::string& cache_dir);
 
   ~Cache() override;
 

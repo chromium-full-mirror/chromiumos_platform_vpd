@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "base/files/file_path.h"
 
 #include "vpd/types.h"
 #include "vpd/util/file.h"
@@ -21,30 +21,29 @@ namespace {
 
 constexpr char kRunVpd[] = "/run/vpd";
 
-base::FilePath CacheFilePath(VpdRegion region, const base::FilePath& dir) {
+std::string CacheFilePath(VpdRegion region, const std::string& dir) {
   if (region == VpdRo) {
-    return dir.Append("ro.txt");
+    return vpd::util::JoinPath(dir, "ro.txt");
   }
   if (region == VpdRw) {
-    return dir.Append("rw.txt");
+    return vpd::util::JoinPath(dir, "rw.txt");
   }
   __builtin_unreachable();
 }
 
 }  // namespace
 
-CacheFile::CacheFile(VpdRegion region)
-    : CacheFile(region, base::FilePath(kRunVpd)) {}
+CacheFile::CacheFile(VpdRegion region) : CacheFile(region, kRunVpd) {}
 
-CacheFile::CacheFile(VpdRegion region, const base::FilePath& cacheDir)
+CacheFile::CacheFile(VpdRegion region, const std::string& cacheDir)
     : path_(CacheFilePath(region, cacheDir)) {}
 
 bool CacheFile::Exists() const {
-  return vpd::util::PathExists(path_.value());
+  return vpd::util::PathExists(path_);
 }
 
 bool CacheFile::Read(std::vector<const KeyVal>* kv) const {
-  auto data = vpd::util::ReadFileToString(path_.value());
+  auto data = vpd::util::ReadFileToString(path_);
   if (!data) {
     LOG(ERROR) << "Failed to read cache file: " << path_;
     return false;
@@ -79,7 +78,7 @@ bool CacheFile::Write(const std::vector<const KeyVal>& kvs) const {
     data += kv.key + "=\"" + kv.value + "\"\n";
   }
 
-  if (!vpd::util::WriteFile(path_.AsUTF8Unsafe(), data)) {
+  if (!vpd::util::WriteFile(path_, data)) {
     PLOG(ERROR) << "failed to write to " << path_;
     return false;
   }

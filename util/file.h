@@ -27,6 +27,9 @@ EXPORT std::vector<std::string> ListFiles(const std::string& dir);
 
 EXPORT bool PathExists(const std::string& path);
 
+EXPORT std::string JoinPath(const std::string& dir,
+                            const std::string& basename);
+
 }  // namespace util
 }  // namespace vpd
 
