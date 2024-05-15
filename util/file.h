@@ -25,6 +25,8 @@ EXPORT bool WriteFile(const std::string& filename, const std::string& data);
 
 EXPORT std::vector<std::string> ListFiles(const std::string& dir);
 
+EXPORT bool PathExists(const std::string& path);
+
 }  // namespace util
 }  // namespace vpd
 

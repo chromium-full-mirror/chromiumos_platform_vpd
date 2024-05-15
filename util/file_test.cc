@@ -185,4 +185,27 @@ TEST_F(FileUtilTest, ListFilesTest_InvalidPathName) {
   EXPECT_TRUE(vpd::util::ListFiles(std::string({'\0'})).empty());
 }
 
+TEST_F(FileUtilTest, PathExistsTest_PathExists) {
+  // Directory exists.
+  ASSERT_TRUE(base::DirectoryExists(temp_dir_.GetPath()));
+  EXPECT_TRUE(vpd::util::PathExists(temp_dir_.GetPath().value()));
+
+  // File exists.
+  auto f = temp_dir_.GetPath().Append("PathExistsTest_PathExists");
+  ASSERT_TRUE(base::WriteFile(f, ""));
+  ASSERT_TRUE(base::PathExists(f));
+  EXPECT_TRUE(vpd::util::PathExists(f.value()));
+}
+
+TEST_F(FileUtilTest, PathExistsTest_PathNotExists) {
+  auto f = temp_dir_.GetPath().Append("PathExistsTest_PathExists");
+  ASSERT_FALSE(base::PathExists(f));
+  EXPECT_FALSE(vpd::util::PathExists(f.value()));
+}
+
+TEST_F(FileUtilTest, PathExistsTest_InvalidPathName) {
+  EXPECT_FALSE(vpd::util::PathExists(""));
+  EXPECT_FALSE(vpd::util::PathExists(std::string({'\0'})));
+}
+
 }  // namespace vpd

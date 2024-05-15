@@ -10,7 +10,6 @@
 
 #include "absl/log/log.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 
 #include "vpd/types.h"
 #include "vpd/util/file.h"
@@ -41,7 +40,7 @@ CacheFile::CacheFile(VpdRegion region, const base::FilePath& cacheDir)
     : path_(CacheFilePath(region, cacheDir)) {}
 
 bool CacheFile::Exists() const {
-  return base::PathExists(path_);
+  return vpd::util::PathExists(path_.value());
 }
 
 bool CacheFile::Read(std::vector<const KeyVal>* kv) const {

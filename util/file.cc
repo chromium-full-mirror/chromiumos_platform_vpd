@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include <fstream>
 #include <optional>
@@ -84,6 +85,10 @@ std::vector<std::string> ListFiles(const std::string& dir) {
 
   closedir(d);
   return files;
+}
+
+bool PathExists(const std::string& path) {
+  return access(path.c_str(), F_OK) == 0;
 }
 
 }  // namespace util
