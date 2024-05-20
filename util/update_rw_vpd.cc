@@ -54,15 +54,5 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 
-  // TODO(b/77594752): Remove when all users have converted to libvpd.
-  brillo::ProcessImpl proc;
-  proc.AddArg("/usr/sbin/dump_vpd_log");
-  proc.AddArg("--force");
-  int ret = proc.Run();
-  if (ret != 0) {
-    PLOG(ERROR) << "dump_vpd_log failed";
-    return ret;
-  }
-
   return 0;
 }
