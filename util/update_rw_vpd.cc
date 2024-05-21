@@ -17,13 +17,9 @@
 // Example usage: update_rw_vpd block_devmode 1 check_enrollment 0
 
 #include <iostream>
-#include <map>
-#include <optional>
 #include <string>
 
 #include <base/logging.h>
-#include <base/strings/string_util.h>
-#include <brillo/process/process.h>
 
 #include "vpd/util/update_rw_vpd.h"
 #include "vpd/vpd.h"
