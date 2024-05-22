@@ -13,7 +13,6 @@
 #include <string>
 
 #include "absl/log/log.h"
-#include "base/strings/string_util.h"
 
 #include "vpd/vpd.h"
 
@@ -32,10 +31,9 @@ std::optional<std::map<std::string, std::optional<std::string>>> ParseArgs(
     }
     std::string value = argv[i];
 
-    if (!base::ContainsOnlyChars(key,
-                                 "abcdefghijklmnopqrstuvwxyz"
-                                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                 "0123456789_")) {
+    if (key.find_first_not_of("abcdefghijklmnopqrstuvwxyz"
+                              "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                              "0123456789_") != std::string::npos) {
       LOG(ERROR) << "Invalid key name: " << key;
       return {};
     }
