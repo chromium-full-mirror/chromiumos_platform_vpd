@@ -6,6 +6,7 @@ import("//common-mk/pkg_config.gni")
 
 group("all") {
   deps = [
+    ":dump_filtered_vpd",
     ":install_libvpd_headers",
     ":install_tmpfiles_conf",
     ":libvpd",
@@ -32,6 +33,13 @@ group("all") {
       ":vpd_raw_decoder_fuzzer",
     ]
   }
+}
+
+executable("dump_filtered_vpd") {
+  sources = [ "util/dump_filtered_vpd.cc" ]
+  configs += [ ":target_defaults" ]
+  install_path = "sbin"
+  deps = [ ":libvpd" ]
 }
 
 executable("update_rw_vpd") {
