@@ -26,7 +26,8 @@ class EXPORT Cache : public VpdProviderInterface {
   // Only for tests.
   Cache(const std::string& fake_flash_path,
         unsigned int size,
-        const std::string& cache_dir);
+        const std::string& cache_dir,
+        const Sysfs& sysfs);
 
   ~Cache() override;
 

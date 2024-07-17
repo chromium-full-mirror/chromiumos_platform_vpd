@@ -15,6 +15,7 @@
 #include "vpd/cache.h"
 #include "vpd/fake_fmap.h"
 #include "vpd/flashrom.h"
+#include "vpd/sysfs.h"
 #include "vpd/types.h"
 
 namespace vpd {
@@ -37,8 +38,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                     FakeFmap::GetProgrammerParams(flash_path, flash_size));
   flashrom.Write(VpdRo, std::vector<uint8_t>(data, data + size));
 
+  // Fake sysfs.
+  Sysfs sysfs(temp_dir.GetPath().value());
+
   // Fire away!
-  Cache cache(flash_path.value(), flash_size, temp_dir.GetPath().value());
+  Cache cache(flash_path.value(), flash_size, temp_dir.GetPath().value(),
+              sysfs);
   auto dict = cache.GetValues(VpdRo);
 
   // A valid dict is all we're looking for.

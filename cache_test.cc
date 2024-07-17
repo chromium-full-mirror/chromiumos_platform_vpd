@@ -20,8 +20,10 @@ class CacheTest : public ::testing::Test {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     base_dir_ = temp_dir_.GetPath();
     fake_flash_path_ = base_dir_.Append("flash.bin");
-    cache_ =
-        Cache(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value());
+    sysfs_dir_ = base_dir_;
+    sysfs_ = Sysfs(sysfs_dir_.value());
+    cache_ = Cache(fake_flash_path_.value(), 16 * 1024 * 1024,
+                   base_dir_.value(), sysfs_);
   }
 
   void FillFlashFile(bool empty_fmap = false) {
@@ -31,6 +33,8 @@ class CacheTest : public ::testing::Test {
   base::ScopedTempDir temp_dir_;
   base::FilePath base_dir_;
   base::FilePath fake_flash_path_;
+  base::FilePath sysfs_dir_;
+  Sysfs sysfs_;
   Cache cache_;
 };
 
@@ -95,7 +99,8 @@ TEST_F(CacheTest, MultiClient) {
   EXPECT_EQ(cache_.GetValue(VpdRw, "foo"), "bar");
   EXPECT_EQ(cache_.GetValue(VpdRw, "serial"), "number");
 
-  Cache cache2(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value());
+  Cache cache2(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value(),
+               sysfs_);
   EXPECT_EQ(cache2.GetValue(VpdRw, "foo"), "bar");
   EXPECT_EQ(cache2.GetValue(VpdRw, "serial"), "number");
 
@@ -121,7 +126,8 @@ TEST_F(CacheTest, FlashFailure) {
   EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
 
   // Second instance (e.g., rereading from cache?) is also empty.
-  Cache cache2(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value());
+  Cache cache2(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value(),
+               sysfs_);
   EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
 }
 

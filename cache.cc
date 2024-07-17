@@ -40,10 +40,12 @@ std::vector<KeyVal> MapToVector(const std::map<std::string, std::string>& map) {
 
 Cache::Cache(const std::string& fake_flash_path,
              unsigned int size,
-             const std::string& cache_dir)
+             const std::string& cache_dir,
+             const Sysfs& sysfs)
     : programmer_args_(absl::StrFormat("emulate=VARIABLE_SIZE,size=%u,image=%s",
                                        size,
                                        fake_flash_path.c_str())),
+      sysfs_(sysfs),
       cache_file_({
           {VpdRo, CacheFile(VpdRo, cache_dir)},
           {VpdRw, CacheFile(VpdRw, cache_dir)},
