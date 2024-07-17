@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/initialize.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 
@@ -429,6 +430,8 @@ int main(int argc, char* argv[]) {
   bool read_from_file = false;
   bool raw_input = false;
   bool use_cache = true;
+
+  absl::InitializeLog();
 
   while ((opt = getopt_long(argc, argv, optstring, long_options,
                             &option_index)) != EOF) {

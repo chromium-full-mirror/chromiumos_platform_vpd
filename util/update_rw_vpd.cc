@@ -18,12 +18,15 @@
 
 #include <iostream>
 
+#include "absl/log/initialize.h"
 #include "absl/log/log.h"
 
 #include "vpd/util/update_rw_vpd.h"
 #include "vpd/vpd.h"
 
 int main(int argc, const char* argv[]) {
+  absl::InitializeLog();
+
   const auto write_values = update_rw_vpd::ParseArgs(argc, argv);
   if (!write_values) {
     return 1;

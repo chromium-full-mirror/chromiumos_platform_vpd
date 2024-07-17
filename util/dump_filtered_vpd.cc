@@ -8,7 +8,8 @@
 #include <iostream>
 #include <set>
 
-#include <vpd/vpd.h>
+#include "absl/log/initialize.h"
+#include "vpd/vpd.h"
 
 namespace {
 
@@ -28,6 +29,7 @@ constexpr std::array kVpdKeyAllowlist{
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  absl::InitializeLog();
   vpd::Vpd vpd;
 
   auto ro = vpd.GetValues(vpd::VpdRo);
