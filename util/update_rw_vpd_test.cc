@@ -20,10 +20,10 @@ namespace vpd {
 class UpdateRwVpdTest : public ::testing::Test {};
 
 TEST_F(UpdateRwVpdTest, ParseArgs) {
-  std::string prog_name = "update_rw_vpd";
+  const char* prog_name = "update_rw_vpd";
 
   struct expectation {
-    std::vector<std::string> args;
+    std::vector<const char*> args;
     std::optional<std::map<std::string, std::optional<std::string>>> values;
   };
 
@@ -63,10 +63,8 @@ TEST_F(UpdateRwVpdTest, ParseArgs) {
 
   for (auto& expectation : expectations) {
     int argc = expectation.args.size();
-    const char* argv[argc];
-    for (int i = 0; i < argc; i++) {
-      argv[i] = expectation.args[i].c_str();
-    }
+    const char** argv = expectation.args.data();
+
     EXPECT_EQ(expectation.values, update_rw_vpd::ParseArgs(argc, argv));
   }
 }
