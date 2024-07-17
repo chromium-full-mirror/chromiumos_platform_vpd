@@ -3,6 +3,19 @@
 // found in the LICENSE file.
 //
 // Outputs a filtered list of VPD key/value pairs.
+//
+// Some clients will care not just whether these key/value pairs exist, but
+// also whether the underlying region storage was valid. We dump some free-form
+// error text about their status in stderr, and we dump precise error codes on
+// exit as well.
+//
+// Exit status expectation:
+//   0 = both RO and RW VPD are valid
+//   1 = only RO is invalid
+//   2 = only RW is invalid
+//   3 = both RO and RW are invalid
+//
+// All other exit statuses are unexpected.
 
 #include <array>
 #include <iostream>
@@ -26,6 +39,13 @@ constexpr std::array kVpdKeyAllowlist{
     "sku_number",
 };
 
+enum ExitStatus {
+  Valid = 0,
+  RoInvalid = 1,
+  RwInvalid = 2,
+  BothInvalid = RoInvalid | RwInvalid,
+};
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -46,5 +66,17 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  return 0;
+  int ret = Valid;
+
+  if (!vpd.Valid(vpd::VpdRo)) {
+    std::cerr << "RO VPD is invalid\n";
+    ret |= RoInvalid;
+  }
+
+  if (!vpd.Valid(vpd::VpdRw)) {
+    std::cerr << "RW VPD is invalid\n";
+    ret |= RwInvalid;
+  }
+
+  return ret;
 }
