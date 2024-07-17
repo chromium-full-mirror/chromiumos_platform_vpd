@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "gtest/gtest.h"
 
@@ -129,6 +130,45 @@ TEST_F(CacheTest, FlashFailure) {
   Cache cache2(fake_flash_path_.value(), 16 * 1024 * 1024, base_dir_.value(),
                sysfs_);
   EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
+}
+
+TEST_F(CacheTest, ValidSysfs) {
+  // No cache files or sysfs yet.
+  EXPECT_FALSE(cache_.Valid(VpdRo));
+  EXPECT_FALSE(cache_.Valid(VpdRw));
+
+  // Only RW sysfs exists.
+  ASSERT_TRUE(base::CreateDirectory(sysfs_dir_.Append("rw")));
+  EXPECT_FALSE(cache_.Valid(VpdRo));
+  EXPECT_TRUE(cache_.Valid(VpdRw));
+
+  // Both RO and RW sysfs exist.
+  ASSERT_TRUE(base::CreateDirectory(sysfs_dir_.Append("ro")));
+  EXPECT_TRUE(cache_.Valid(VpdRo));
+  EXPECT_TRUE(cache_.Valid(VpdRw));
+
+  // Only RO sysfs exists.
+  ASSERT_TRUE(base::DeleteFile(sysfs_dir_.Append("rw")));
+  EXPECT_TRUE(cache_.Valid(VpdRo));
+  EXPECT_FALSE(cache_.Valid(VpdRw));
+}
+
+TEST_F(CacheTest, ValidCache) {
+  FillFlashFile();
+
+  // No cache file(s) yet; empty flash regions.
+  EXPECT_FALSE(cache_.Valid(VpdRo));
+  EXPECT_FALSE(cache_.Valid(VpdRw));
+
+  // Overwrite RW but not RO.
+  EXPECT_TRUE(cache_.WriteValues(VpdRw, {{"foo", "bar"}}));
+  EXPECT_FALSE(cache_.Valid(VpdRo));
+  EXPECT_TRUE(cache_.Valid(VpdRw));
+
+  // Overwrite RO too.
+  EXPECT_TRUE(cache_.WriteValues(VpdRo, {{"baz", "hello world"}}));
+  EXPECT_TRUE(cache_.Valid(VpdRo));
+  EXPECT_TRUE(cache_.Valid(VpdRw));
 }
 
 }  // namespace vpd

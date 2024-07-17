@@ -23,6 +23,10 @@ Vpd::Vpd(std::unique_ptr<VpdProviderInterface> provider)
 
 Vpd::~Vpd() = default;
 
+bool Vpd::Valid(VpdRegion region) const {
+  return provider_->Valid(region);
+}
+
 std::optional<std::string> Vpd::GetValue(VpdRegion region,
                                          const std::string& key) const {
   return provider_->GetValue(region, key);

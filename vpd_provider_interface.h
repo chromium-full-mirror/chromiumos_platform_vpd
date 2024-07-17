@@ -18,6 +18,8 @@ class VpdProviderInterface {
  public:
   virtual ~VpdProviderInterface() = default;
 
+  virtual bool Valid(VpdRegion region) const = 0;
+
   // Read a single key VPD value from a VPD region.
   //
   // See vpd.h for API definition.

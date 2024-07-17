@@ -31,6 +31,8 @@ class EXPORT Cache : public VpdProviderInterface {
 
   ~Cache() override;
 
+  bool Valid(VpdRegion region) const override;
+
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const override;
 

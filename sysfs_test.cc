@@ -73,4 +73,29 @@ TEST_F(SysfsTest, GetValues) {
                    }));
 }
 
+TEST_F(SysfsTest, Exist) {
+  Sysfs sysfs(sysfs_dir_.value());
+
+  // Neither ro nor rw exist.
+  ASSERT_FALSE(base::DirectoryExists(sysfs_dir_.Append("ro")));
+  ASSERT_FALSE(base::DirectoryExists(sysfs_dir_.Append("rw")));
+  EXPECT_FALSE(sysfs.Exists(VpdRo));
+  EXPECT_FALSE(sysfs.Exists(VpdRw));
+
+  // Just ro exists.
+  ASSERT_TRUE(base::CreateDirectory(sysfs_dir_.Append("ro")));
+  EXPECT_TRUE(sysfs.Exists(VpdRo));
+  EXPECT_FALSE(sysfs.Exists(VpdRw));
+
+  // Both ro and rw exist.
+  ASSERT_TRUE(base::CreateDirectory(sysfs_dir_.Append("rw")));
+  EXPECT_TRUE(sysfs.Exists(VpdRo));
+  EXPECT_TRUE(sysfs.Exists(VpdRw));
+
+  // Just rw exists.
+  ASSERT_TRUE(base::DeleteFile(sysfs_dir_.Append("ro")));
+  EXPECT_FALSE(sysfs.Exists(VpdRo));
+  EXPECT_TRUE(sysfs.Exists(VpdRw));
+}
+
 }  // namespace vpd

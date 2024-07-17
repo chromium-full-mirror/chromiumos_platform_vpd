@@ -19,6 +19,14 @@ class EXPORT Sysfs {
   Sysfs();
   explicit Sysfs(const std::string& sysfs_dir);
 
+  // Check if the VPD region exists in sysfs.
+  //
+  // A VPD region will not exist in sysfs if the coreboot parser couldn't
+  // understand it -- for example, if the region was erased or corrupt.
+  //
+  // @param region The VPD region to check.
+  bool Exists(VpdRegion region) const;
+
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const;
 

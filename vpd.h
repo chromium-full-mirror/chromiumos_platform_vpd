@@ -24,6 +24,17 @@ class EXPORT Vpd {
   explicit Vpd(std::unique_ptr<VpdProviderInterface> provider);
   ~Vpd();
 
+  // Check if a VPD region has valid contents.
+  //
+  // This operation checks if a VPD region has valid contents. A region is
+  // considered invalid if it doesn't have appropriate formatting and headers
+  // -- for example, if the flash region is corrupt or erased and couldn't be
+  // parsed. A region may become valid again if a subsequent write operation
+  // programs new contents.
+  //
+  // @param region The region to check.
+  bool Valid(VpdRegion region) const;
+
   // Read a single key VPD value from a VPD region.
   //
   // @param region The VPD region to read from.

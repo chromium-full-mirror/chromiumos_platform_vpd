@@ -53,6 +53,14 @@ Cache::Cache(const std::string& fake_flash_path,
 
 Cache::~Cache() {}
 
+bool Cache::Valid(VpdRegion region) const {
+  // If a cache file exists, that means we (over)wrote it => valid.
+  // If the cache file doesn't exist but the sysfs entry does, then we had a
+  // valid VPD at boot, and we trust it.
+  // Otherwise, we have no valid VPD => invalid.
+  return cache_file_.at(region).Exists() || sysfs_.Exists(region);
+}
+
 // Pull key/value map from either the cache file or from sysfs.
 std::map<std::string, std::string> Cache::ReadValues(VpdRegion region) const {
   std::vector<KeyVal> pairs;

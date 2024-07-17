@@ -48,6 +48,10 @@ Sysfs::Sysfs() : Sysfs(kSysfsVpd) {}
 
 Sysfs::Sysfs(const std::string& sysfs_dir) : sysfs_dir_(sysfs_dir) {}
 
+bool Sysfs::Exists(VpdRegion region) const {
+  return vpd::util::PathExists(VpdRegionToSysfsPath(sysfs_dir_, region));
+}
+
 std::optional<std::string> Sysfs::GetValue(VpdRegion region,
                                            const std::string& key) const {
   return VpdSysfsRead(VpdRegionToSysfsPath(sysfs_dir_, region), key);

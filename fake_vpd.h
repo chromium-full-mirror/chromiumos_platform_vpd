@@ -22,6 +22,8 @@ class EXPORT FakeVpd : public VpdProviderInterface {
 
   ~FakeVpd() override {}
 
+  bool Valid(VpdRegion region) const override { return true; }
+
   std::optional<std::string> GetValue(VpdRegion region,
                                       const std::string& key) const override {
     const auto& map = store_.at(region);
