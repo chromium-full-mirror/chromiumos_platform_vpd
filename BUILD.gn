@@ -131,6 +131,7 @@ shared_library("libvpd") {
     "libvpd.cc",
     "sysfs.cc",
     "util/file.cc",
+    "util/scoped_umask.cc",
     "util/string.cc",
   ]
   configs += [ ":target_defaults" ]
@@ -171,6 +172,7 @@ if (use.test) {
       "integration_test.cc",
       "sysfs_test.cc",
       "util/file_test.cc",
+      "util/scoped_umask_test.cc",
       "util/string_test.cc",
       "util/update_rw_vpd_test.cc",
     ]
