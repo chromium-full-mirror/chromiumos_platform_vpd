@@ -14,6 +14,7 @@
 
 #include "vpd/types.h"
 #include "vpd/util/file.h"
+#include "vpd/util/scoped_umask.h"
 #include "vpd/util/string.h"
 
 namespace vpd {
@@ -80,9 +81,12 @@ bool CacheFile::Write(const std::vector<KeyVal>& kvs) const {
     data += kv.key + "=\"" + kv.value + "\"\n";
   }
 
-  if (!vpd::util::WriteFile(path_, data)) {
-    PLOG(ERROR) << "failed to write to " << path_;
-    return false;
+  {
+    vpd::util::ScopedUmask umask(0022);
+    if (!vpd::util::WriteFile(path_, data)) {
+      PLOG(ERROR) << "failed to write to " << path_;
+      return false;
+    }
   }
 
   return true;

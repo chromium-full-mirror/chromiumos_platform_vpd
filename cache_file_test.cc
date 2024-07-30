@@ -14,6 +14,7 @@
 
 #include "vpd/cache_file.h"
 #include "vpd/types.h"
+#include "vpd/util/scoped_umask.h"
 
 namespace vpd {
 
@@ -202,6 +203,28 @@ TEST_F(CacheFileTest, Bidirectional) {
     EXPECT_TRUE(result.has_value());
     EXPECT_EQ(kv, result);
   }
+}
+
+TEST_F(CacheFileTest, Umask) {
+  vpd::util::ScopedUmask outer_mask(0066);
+  int mode;
+
+  // Ensure umask is taking effect.
+  base::FilePath junk_path = base_dir_.Append("junk");
+  EXPECT_TRUE(base::WriteFile(junk_path, "nothing to see here"));
+  EXPECT_TRUE(base::GetPosixFilePermissions(junk_path, &mode));
+  EXPECT_EQ(mode, 0600);
+
+  // Now ensure cache file ignores the preexisting umask.
+  CacheFile cache(VpdRw, base_dir_.value());
+  EXPECT_TRUE(cache.Write({{
+      .key = "foo",
+      .value = "bar",
+  }}));
+
+  base::FilePath cache_path = base_dir_.Append("rw.txt");
+  EXPECT_TRUE(base::GetPosixFilePermissions(cache_path, &mode));
+  EXPECT_EQ(mode, 0644);
 }
 
 }  // namespace vpd
