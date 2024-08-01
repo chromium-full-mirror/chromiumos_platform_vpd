@@ -27,16 +27,28 @@
 namespace {
 
 constexpr std::array kVpdKeyAllowlist{
-    "ActivateDate",     "block_devmode",
-    "check_enrollment", "customization_id",
-    "display_profiles", "initial_locale",
-    "initial_timezone", "keyboard_layout",
-    "model_name",       "oem_device_requisition",
-    "oem_name",         "panel_backlight_max_nits",
-    "Product_S/N",      "region",
-    "rlz_brand_code",   "rlz_embargo_end_date",
-    "serial_number",    "should_send_rlz_ping",
+    "ActivateDate",
+    "Product_S/N",
+    "attested_device_id",
+    "block_devmode",
+    "check_enrollment",
+    "customization_id",
+    "display_profiles",
+    "gbind_attribute",
+    "initial_locale",
+    "initial_timezone",
+    "keyboard_layout",
+    "model_name",
+    "oem_device_requisition",
+    "oem_name",
+    "panel_backlight_max_nits",
+    "region",
+    "rlz_brand_code",
+    "rlz_embargo_end_date",
+    "serial_number",
+    "should_send_rlz_ping",
     "sku_number",
+    "ubind_attribute",
 };
 
 enum ExitStatus {
