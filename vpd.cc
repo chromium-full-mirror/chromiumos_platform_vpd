@@ -238,6 +238,7 @@ vpd_err_t findVpdPartition(const std::vector<uint8_t>& read_buf,
   return VPD_OK;
 }
 
+/* Load VPD into kv_dict. kv_dict will be unchanged if overwrite_it is set. */
 vpd_err_t loadFile(const std::vector<uint8_t>& vpd_blob,
                    const std::string& region_name,
                    vpd::VpdRegion region,
@@ -384,6 +385,8 @@ void usage(const char* progname) {
          "   Notes:\n"
          "      You can specify multiple -s and -d. However, vpd always\n"
          "         applies -s first, then -d.\n"
+         "      You can specify -O along with multiple -s and -d. However,\n"
+         "          vpd always applies -O first, followed by -s, and then -d.\n"
          "      -g and -l must be mutually exclusive.\n";
 }
 
@@ -420,8 +423,7 @@ int main(int argc, char* argv[]) {
   /* Stores parsed keys (and empty value) from command "delete"
    * arguments. */
   std::map<std::string, std::string> del_argument;
-  /* Stores decoded pairs from VPD. */
-  std::map<std::string, std::string> kv_dict;
+
   vpd::Flashrom flashrom;
   bool write_back_to_flash = false;
   bool list_it = false;
@@ -541,13 +543,21 @@ int main(int argc, char* argv[]) {
     return VPD_ERR_SYNTAX;
   }
 
-  if (raw_input && (!set_argument.empty() || !del_argument.empty())) {
+  if (raw_input &&
+      (!set_argument.empty() || !del_argument.empty() || overwrite_it)) {
     LOG(ERROR) << "Changing in raw mode is not supported";
     return VPD_ERR_SYNTAX;
   }
 
   vpd::Cache cache;
+  /* The original VDP blob got from either file or flashrom. It will not be used
+   * if we enable caching. */
   std::vector<uint8_t> vpd_blob;
+  /* kv_dict stores decoded pairs from VPD. When using caching, key-values pairs
+   * are got from tmpfs cache. Otherwise key-values pairs are parsed from
+   * vpd_blob.
+   */
+  std::map<std::string, std::string> kv_dict;
   if (filename) {
     auto blob = vpd::util::ReadFileToBytes(filename.value());
     if (!blob) {
@@ -561,7 +571,8 @@ int main(int argc, char* argv[]) {
       if (value) {
         kv_dict[*key_to_export] = *value;
       }
-    } else {
+    } else if (!overwrite_it) {
+      /* Leave kv_dict empty if we want to overwrite. */
       kv_dict = cache.GetValues(region);
     }
   } else {
@@ -665,20 +676,36 @@ int main(int argc, char* argv[]) {
   if (modified && use_cache) {
     std::map<std::string, std::optional<std::string>> write_values;
 
-    /* Marshall -s arguments first */
+    auto cached_pair = cache.GetValues(region);
+    if (overwrite_it) {
+      /* Marshall -O arguments first */
+      for (const auto& pair : cached_pair) {
+        /* nullopt means delete. */
+        write_values[pair.first] = std::nullopt;
+      }
+    }
+
+    /* Marshall -s arguments */
     for (const auto& pair : set_argument) {
       write_values[pair.first] = pair.second;
     }
 
-    /* Marhsll -d after, in case they cancel out -s. */
+    /* Marshall -d at the end, in case they cancel out -s. */
     for (const auto& pair : del_argument) {
-      if (write_values.erase(pair.first)) {
-        /* canceled -s. That's enough. */
-        continue;
-      }
-
       /* nullopt means delete. */
       write_values[pair.first] = std::nullopt;
+    }
+
+    /* Avoid attempting to delete pairs that do not exist when -s and -d used
+     * on the same new keys. */
+    for (auto write_it = write_values.begin(); write_it != write_values.end();
+         write_it++) {
+      if (!write_it->second.has_value()) {
+        auto cached_it = cached_pair.find(write_it->first);
+        if (cached_it == cached_pair.end()) {
+          write_values.erase(write_it);
+        }
+      }
     }
 
     if (!cache.WriteValues(region, write_values)) {
@@ -706,7 +733,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (write_back_to_flash) {
-      if (!flashrom.Write(region, vpd_blob)) {
+      if (!flashrom.Write(region, *blob)) {
         LOG(ERROR) << "flashrom write error";
         return VPD_ERR_ROM_WRITE;
       }
