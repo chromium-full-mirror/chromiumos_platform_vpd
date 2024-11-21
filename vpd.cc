@@ -698,13 +698,13 @@ int main(int argc, char* argv[]) {
 
     /* Avoid attempting to delete pairs that do not exist when -s and -d used
      * on the same new keys. */
-    for (auto write_it = write_values.begin(); write_it != write_values.end();
-         write_it++) {
-      if (!write_it->second.has_value()) {
-        auto cached_it = cached_pair.find(write_it->first);
-        if (cached_it == cached_pair.end()) {
-          write_values.erase(write_it);
-        }
+    for (auto write_it = write_values.begin();
+         write_it != write_values.end();) {
+      if (!write_it->second.has_value() &&
+          cached_pair.find(write_it->first) == cached_pair.end()) {
+        write_it = write_values.erase(write_it);
+      } else {
+        ++write_it;
       }
     }
 
