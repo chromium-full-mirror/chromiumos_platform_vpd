@@ -20,9 +20,10 @@ namespace vpd {
 class IntegrationTest : public ::testing::Test {
  protected:
   base::FilePath GetBuildDir() {
-    std::string out_dir;
-    EXPECT_TRUE(base::Environment::Create()->GetVar("OUT", &out_dir));
-    return base::FilePath(out_dir);
+    std::optional<std::string> out_dir =
+        base::Environment::Create()->GetVar("OUT");
+    EXPECT_TRUE(out_dir.has_value());
+    return base::FilePath(*out_dir);
   }
 };
 
