@@ -44,6 +44,8 @@ std::optional<std::string> VpdSysfsRead(const std::string& region_dir,
 
 }  // namespace
 
+using std::string_literals::operator""s;
+
 Sysfs::Sysfs() : Sysfs(kSysfsVpd) {}
 
 Sysfs::Sysfs(const std::string& sysfs_dir) : sysfs_dir_(sysfs_dir) {}
@@ -65,6 +67,9 @@ std::vector<KeyVal> Sysfs::GetValues(VpdRegion region) const {
     auto contents = vpd::util::ReadFileToString(vpd::util::JoinPath(dir, key));
     if (!contents) {
       PLOG(ERROR) << "Failed to read sysfs: " << key;
+      continue;
+    }
+    if (contents.value().find_first_of("\0"s) != std::string::npos) {
       continue;
     }
     res.push_back(KeyVal{

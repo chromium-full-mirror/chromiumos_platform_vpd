@@ -36,6 +36,8 @@ extern "C" {
 
 namespace {
 
+using std::string_literals::operator""s;
+
 /* The comment shown in the begin of --sh output */
 #define SH_COMMENT                                                     \
   "#\n"                                                                \
@@ -148,6 +150,11 @@ vpd_err_t checkKeyValuePair(const std::string& key, const std::string& value) {
       LOG(ERROR) << "serial number cannot end with [-]";
       return VPD_ERR_PARAM;
     }
+  }
+
+  if (value.find_first_of("\0"s) != std::string::npos) {
+    LOG(ERROR) << "value must not contain \\0";
+    return VPD_ERR_PARAM;
   }
 
   return VPD_OK;
