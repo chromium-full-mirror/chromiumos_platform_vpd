@@ -21,6 +21,8 @@ namespace vpd {
 
 namespace {
 
+using std::string_literals::operator""s;
+
 constexpr char kRunVpd[] = "/run/vpd";
 
 std::string CacheFilePath(VpdRegion region, const std::string& dir) {
@@ -52,7 +54,7 @@ std::optional<std::vector<KeyVal>> CacheFile::Read() const {
   }
 
   std::vector<std::pair<std::string, std::string>> pairs;
-  if (!vpd::util::GetKeyValuePairsFromLines(data.value(), pairs)) {
+  if (!vpd::util::GetNullDelimitedKeyValuePairs(data.value(), pairs)) {
     LOG(ERROR) << "Failed to parse cache file: " << path_;
     return std::nullopt;
   }
@@ -78,7 +80,7 @@ bool CacheFile::Write(const std::vector<KeyVal>& kvs) const {
   std::string data;
 
   for (const auto& kv : kvs) {
-    data += kv.key + "=\"" + kv.value + "\"\n";
+    data += kv.key + "=\"" + kv.value + "\"\0"s;
   }
 
   {

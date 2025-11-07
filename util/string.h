@@ -16,9 +16,9 @@
 namespace vpd {
 namespace util {
 
-// Parse lines of key=value pairs. Returns true if the parsing succeeds.
-EXPORT bool GetKeyValuePairsFromLines(
-    const std::string& lines,
+// Parse key=value pairs. Returns true if the parsing succeeds.
+EXPORT bool GetNullDelimitedKeyValuePairs(
+    const std::string& content,
     std::vector<std::pair<std::string, std::string>>& result);
 
 EXPORT std::string StringPrintV(const char* format, va_list args);

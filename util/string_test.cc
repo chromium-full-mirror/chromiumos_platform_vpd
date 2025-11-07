@@ -14,6 +14,8 @@
 
 namespace {
 
+using std::string_literals::operator""s;
+
 // Helper function to easily call StringPrintV
 std::string StringPrintVTestHelper(const char* format, ...) {
   va_list args;
@@ -29,68 +31,68 @@ namespace vpd {
 
 typedef std::vector<std::pair<std::string, std::string>> KeyValuePairs;
 
-TEST(GetKeyValuePairsFromLinesTest, RegularContent) {
+TEST(GetNullDelimitedKeyValuePairsTest, RegularContent) {
   std::pair<std::string, KeyValuePairs> test_cases[] = {
-      {"k=v", {{"k", "v"}}},
-      {"k=v\n", {{"k", "v"}}},
-      {"k1=v1\nk2=v2", {{"k1", "v1"}, {"k2", "v2"}}},
-      {"k1=v1\nk2=v2\n", {{"k1", "v1"}, {"k2", "v2"}}},
+      {"k=v"s, {{"k", "v"}}},
+      {"k=v\0"s, {{"k", "v"}}},
+      {"k1=v1\0k2=v2"s, {{"k1", "v1"}, {"k2", "v2"}}},
+      {"k1=v1\0k2=v2\0"s, {{"k1", "v1"}, {"k2", "v2"}}},
   };
   for (const auto& tc : test_cases) {
     std::string content = tc.first;
     KeyValuePairs want = tc.second;
     KeyValuePairs v;
-    EXPECT_TRUE(vpd::util::GetKeyValuePairsFromLines(content, v));
+    EXPECT_TRUE(vpd::util::GetNullDelimitedKeyValuePairs(content, v));
     EXPECT_EQ(v, want);
   }
 }
 
-TEST(GetKeyValuePairsFromLinesTest, BinaryContent) {
+TEST(GetNullDelimitedKeyValuePairsTest, BinaryContent) {
   std::pair<std::string, KeyValuePairs> test_cases[] = {
-      {std::string({'\0', '=', '\1'}), {{std::string({'\0'}), "\1"}}},
-      {std::string({'\0', '=', '\1', '\n'}), {{std::string({'\0'}), "\1"}}},
-      {std::string({'\0', '=', '\1', '\n', '\2', '=', '\3'}),
-       {{std::string({'\0'}), "\1"}, {"\2", "\3"}}},
-      {std::string({'\0', '=', '\1', '\n', '\2', '=', '\3', '\n'}),
-       {{std::string({'\0'}), "\1"}, {"\2", "\3"}}},
+      {std::string({'\1', '=', '\2'}), {{"\1", "\2"}}},
+      {std::string({'\1', '=', '\2', '\0'}), {{"\1", "\2"}}},
+      {std::string({'\1', '=', '\2', '\0', '\3', '=', '\4'}),
+       {{"\1", "\2"}, {"\3", "\4"}}},
+      {std::string({'\1', '=', '\2', '\0', '\3', '=', '\4', '\0'}),
+       {{"\1", "\2"}, {"\3", "\4"}}},
   };
   for (const auto& tc : test_cases) {
     std::string content = tc.first;
     KeyValuePairs want = tc.second;
     KeyValuePairs v;
-    EXPECT_TRUE(vpd::util::GetKeyValuePairsFromLines(content, v));
+    EXPECT_TRUE(vpd::util::GetNullDelimitedKeyValuePairs(content, v));
     EXPECT_EQ(v, want);
   }
 }
 
-TEST(GetKeyValuePairsFromLinesTest, EmptyContent) {
+TEST(GetNullDelimitedKeyValuePairsTest, EmptyContent) {
   KeyValuePairs v;
-  EXPECT_TRUE(vpd::util::GetKeyValuePairsFromLines("", v));
+  EXPECT_TRUE(vpd::util::GetNullDelimitedKeyValuePairs("", v));
   EXPECT_TRUE(v.empty());
 }
 
-TEST(GetKeyValuePairsFromLinesTest, EqualSignInValue) {
+TEST(GetNullDelimitedKeyValuePairsTest, EqualSignInValue) {
   KeyValuePairs v;
-  EXPECT_TRUE(vpd::util::GetKeyValuePairsFromLines("a=b=c", v));
+  EXPECT_TRUE(vpd::util::GetNullDelimitedKeyValuePairs("a=b=c", v));
   KeyValuePairs want = {{"a", "b=c"}};
   EXPECT_EQ(v, want);
 }
 
-TEST(GetKeyValuePairsFromLinesTest, InvalidEmptyContent) {
+TEST(GetNullDelimitedKeyValuePairsTest, InvalidEmptyContent) {
   std::string test_cases[] = {
-      " ", "  ", "\n", " \n", "\n ", "\n\n",
+      " ", "  ", "\0"s, " \0"s, "\0 "s, "\0\0"s,
   };
   for (const auto& content : test_cases) {
     KeyValuePairs v;
-    EXPECT_FALSE(vpd::util::GetKeyValuePairsFromLines(content, v));
+    EXPECT_FALSE(vpd::util::GetNullDelimitedKeyValuePairs(content, v));
   }
 }
 
-TEST(GetKeyValuePairsFromLinesTest, MissingItem) {
-  std::string test_cases[] = {"k=", "=v", "=", "k1=v1\nk2=", "k1=\nk2=v2"};
+TEST(GetNullDelimitedKeyValuePairsTest, MissingItem) {
+  std::string test_cases[] = {"k=", "=v", "=", "k1=v1\0k2="s, "k1=\0k2=v2"s};
   for (const auto& tc : test_cases) {
     KeyValuePairs v;
-    EXPECT_FALSE(vpd::util::GetKeyValuePairsFromLines(tc, v));
+    EXPECT_FALSE(vpd::util::GetNullDelimitedKeyValuePairs(tc, v));
   }
 }
 

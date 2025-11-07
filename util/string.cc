@@ -43,19 +43,19 @@ bool TryStringPrintV(size_t mem_length,
 namespace vpd {
 namespace util {
 
-bool GetKeyValuePairsFromLines(
+bool GetNullDelimitedKeyValuePairs(
     const std::string& content,
     std::vector<std::pair<std::string, std::string>>& result) {
-  std::vector<std::string> lines = absl::StrSplit(content, '\n');
+  std::vector<std::string> entries = absl::StrSplit(content, '\0');
 
-  // Remove trailing linefeed.
-  if (!lines.empty() && lines.back().empty()) {
-    lines.pop_back();
+  // Remove trailing separator.
+  if (!entries.empty() && entries.back().empty()) {
+    entries.pop_back();
   }
 
-  for (auto line : lines) {
+  for (auto entry : entries) {
     std::pair<std::string, std::string> kv =
-        absl::StrSplit(line, absl::MaxSplits('=', 1));
+        absl::StrSplit(entry, absl::MaxSplits('=', 1));
     if (kv.first.empty() || kv.second.empty()) {
       return false;
     }

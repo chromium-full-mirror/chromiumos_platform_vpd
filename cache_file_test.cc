@@ -18,6 +18,8 @@
 
 namespace vpd {
 
+using std::string_literals::operator""s;
+
 class CacheFileTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -55,7 +57,7 @@ TEST_F(CacheFileTest, Read) {
   };
   std::array<expectation, 5> expectations = {
       (struct expectation){
-          .contents = "foo=\"bar\"\n",
+          .contents = "foo=\"bar\"\0"s,
           .kvs =
               {
                   {
@@ -66,8 +68,8 @@ TEST_F(CacheFileTest, Read) {
           .expect_success = true,
       },
       (struct expectation){
-          .contents = "foo=\"bar\"\nthis=\"has\"quotes\"\nthat=\"="
-                      "extraequals\"\nempty=\"\"\n",
+          .contents = "foo=\"bar\"\0this=\"has\"quotes\"\0that=\"="s
+                      "extraequals\"\0empty=\"\"\0"s,
           .kvs =
               {
                   {
@@ -130,7 +132,7 @@ TEST_F(CacheFileTest, Write) {
                       .value = "bar",
                   },
               },
-          .contents = "foo=\"bar\"\n",
+          .contents = "foo=\"bar\"\0"s,
       },
       (struct expectation){
           .kvs =
@@ -152,8 +154,8 @@ TEST_F(CacheFileTest, Write) {
                       .value = "",
                   },
               },
-          .contents = "foo=\"bar\"\nthis=\"has\"quotes\"\nthat=\"="
-                      "extraequals\"\nempty=\"\"\n",
+          .contents = "foo=\"bar\"\0this=\"has\"quotes\"\0that=\"="s
+                      "extraequals\"\0empty=\"\"\0"s,
       },
       (struct expectation){
           .kvs = {},
