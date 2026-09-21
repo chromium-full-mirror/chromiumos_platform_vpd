@@ -52,6 +52,7 @@ class EXPORT Cache : public VpdProviderInterface {
   std::optional<std::string> programmer_args_;
 
   Sysfs sysfs_;
+  std::string lock_file_path_ = "/run/vpd/vpd.lock";
   std::map<VpdRegion, CacheFile> cache_file_ = {
       {VpdRo, CacheFile(VpdRo)},
       {VpdRw, CacheFile(VpdRw)},

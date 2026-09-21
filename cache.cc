@@ -4,7 +4,11 @@
 
 #include "vpd/cache.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
+#include <sys/file.h>
+#include <unistd.h>
 
 #include <map>
 #include <optional>
@@ -19,6 +23,7 @@
 #include "vpd/encoder.h"
 #include "vpd/flashrom.h"
 #include "vpd/types.h"
+#include "vpd/util/file.h"
 
 namespace vpd {
 
@@ -36,6 +41,39 @@ std::vector<KeyVal> MapToVector(const std::map<std::string, std::string>& map) {
   return res;
 }
 
+class ScopedFlock {
+ public:
+  ScopedFlock(const ScopedFlock&) = delete;
+  ScopedFlock& operator=(const ScopedFlock&) = delete;
+
+  explicit ScopedFlock(int fd) : fd_(fd) {}
+
+  ~ScopedFlock() {
+    flock(fd_, LOCK_UN);
+    close(fd_);
+  }
+
+  static std::optional<ScopedFlock> Acquire(const std::string& path) {
+    int fd = open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (fd < 0) {
+      PLOG(ERROR) << "Failed to open lock file: " << path;
+      return std::nullopt;
+    }
+    while (flock(fd, LOCK_EX) < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      PLOG(ERROR) << "Failed to acquire exclusive lock: " << path;
+      close(fd);
+      return std::nullopt;
+    }
+    return std::make_optional<ScopedFlock>(fd);
+  }
+
+ private:
+  int fd_;
+};
+
 }  // namespace
 
 Cache::Cache(const std::string& fake_flash_path,
@@ -46,6 +84,7 @@ Cache::Cache(const std::string& fake_flash_path,
                                        size,
                                        fake_flash_path.c_str())),
       sysfs_(sysfs),
+      lock_file_path_(vpd::util::JoinPath(cache_dir, "vpd.lock")),
       cache_file_({
           {VpdRo, CacheFile(VpdRo, cache_dir)},
           {VpdRw, CacheFile(VpdRw, cache_dir)},
@@ -144,6 +183,11 @@ bool Cache::WriteValues(
     const std::map<std::string, std::optional<std::string>>& pairs) {
   if (pairs.empty()) {
     LOG(ERROR) << "nothing to write";
+    return false;
+  }
+
+  auto lock = ScopedFlock::Acquire(lock_file_path_);
+  if (!lock) {
     return false;
   }
 

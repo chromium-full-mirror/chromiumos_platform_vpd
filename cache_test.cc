@@ -2,14 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+
 #include <optional>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/location.h"
+#include "base/test/bind.h"
+#include "base/threading/thread.h"
 #include "gtest/gtest.h"
 
 #include "vpd/cache.h"
+#include "vpd/cache_file.h"
 #include "vpd/fake_fmap.h"
 #include "vpd/types.h"
 
@@ -169,6 +178,42 @@ TEST_F(CacheTest, ValidCache) {
   EXPECT_TRUE(cache_.WriteValues(VpdRo, {{"baz", "hello world"}}));
   EXPECT_TRUE(cache_.Valid(VpdRo));
   EXPECT_TRUE(cache_.Valid(VpdRw));
+}
+
+TEST_F(CacheTest, WriteValuesWaitsForLockAndReadsFreshCache) {
+  FillFlashFile();
+
+  ASSERT_TRUE(cache_.WriteValues(VpdRw, {{"holder_key", "old"}}));
+
+  base::ScopedFD lock_fd(open(base_dir_.Append("vpd.lock").value().c_str(),
+                              O_CREAT | O_RDWR | O_CLOEXEC, 0600));
+  ASSERT_TRUE(lock_fd.is_valid());
+  ASSERT_EQ(flock(lock_fd.get(), LOCK_EX), 0);
+
+  base::Thread holder("holder");
+  ASSERT_TRUE(holder.Start());
+  holder.task_runner()->PostTask(
+      FROM_HERE, base::BindLambdaForTesting([&] {
+        // Let the main thread block on vpd.lock in WriteValues().
+        usleep(50 * 1000);
+        EXPECT_TRUE(CacheFile(VpdRw, base_dir_.value())
+                        .Write({{.key = "holder_key", .value = "new"}}));
+        EXPECT_EQ(flock(lock_fd.get(), LOCK_UN), 0);
+      }));
+
+  EXPECT_TRUE(cache_.WriteValues(VpdRw, {{"waiter_key", "new"}}));
+  holder.Stop();
+
+  EXPECT_EQ(cache_.GetValue(VpdRw, "holder_key"), "new");
+  EXPECT_EQ(cache_.GetValue(VpdRw, "waiter_key"), "new");
+}
+
+TEST_F(CacheTest, WriteValuesFailsWhenLockFileCannotBeOpened) {
+  FillFlashFile();
+  ASSERT_TRUE(base::CreateDirectory(base_dir_.Append("vpd.lock")));
+
+  EXPECT_FALSE(cache_.WriteValues(VpdRw, {{"foo", "bar"}}));
+  EXPECT_TRUE(cache_.GetValues(VpdRw).empty());
 }
 
 }  // namespace vpd
