@@ -17,11 +17,14 @@
 //
 // All other exit statuses are unexpected.
 
+#include <algorithm>
 #include <array>
 #include <iostream>
 #include <set>
+#include <string_view>
 
 #include "absl/log/initialize.h"
+#include "absl/strings/ascii.h"
 #include "vpd/vpd.h"
 
 namespace {
@@ -58,6 +61,12 @@ enum ExitStatus {
   BothInvalid = RoInvalid | RwInvalid,
 };
 
+bool IsValidVpdValue(std::string_view value) {
+  return std::ranges::all_of(value, [](unsigned char c) {
+    return absl::ascii_isprint(c) && c != '"';
+  });
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -72,7 +81,7 @@ int main(int argc, char* argv[]) {
 
   for (const auto& dict : std::array{ro, rw}) {
     for (const auto& [key, value] : dict) {
-      if (allowlist.contains(key)) {
+      if (allowlist.contains(key) && IsValidVpdValue(value)) {
         std::cout << "\"" << key << "\"=\"" << value << "\"\n";
       }
     }
