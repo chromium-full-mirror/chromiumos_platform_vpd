@@ -19,9 +19,10 @@
 
 #include <algorithm>
 #include <array>
+#include <flat_set>
 #include <iostream>
-#include <set>
 #include <string_view>
+#include <utility>
 
 #include "absl/log/initialize.h"
 #include "absl/strings/ascii.h"
@@ -29,15 +30,11 @@
 
 namespace {
 
-constexpr std::array kVpdKeyAllowlist{
-    "ActivateDate",
+constexpr std::array kRoVpdKeyAllowlist{
     "Product_S/N",
     "attested_device_id",
-    "block_devmode",
-    "check_enrollment",
     "customization_id",
     "display_profiles",
-    "gbind_attribute",
     "initial_locale",
     "initial_timezone",
     "keyboard_layout",
@@ -47,10 +44,13 @@ constexpr std::array kVpdKeyAllowlist{
     "panel_backlight_max_nits",
     "region",
     "rlz_brand_code",
-    "rlz_embargo_end_date",
     "serial_number",
-    "should_send_rlz_ping",
     "sku_number",
+};
+
+constexpr std::array kRwVpdKeyAllowlist{
+    "ActivateDate",    "block_devmode",        "check_enrollment",
+    "gbind_attribute", "rlz_embargo_end_date", "should_send_rlz_ping",
     "ubind_attribute",
 };
 
@@ -74,12 +74,15 @@ int main(int argc, char* argv[]) {
   vpd::Vpd vpd;
 
   auto ro = vpd.GetValues(vpd::VpdRo);
+  std::flat_set<std::string_view> ro_allowlist(std::begin(kRoVpdKeyAllowlist),
+                                               std::end(kRoVpdKeyAllowlist));
+
   auto rw = vpd.GetValues(vpd::VpdRw);
+  std::flat_set<std::string_view> rw_allowlist(std::begin(kRwVpdKeyAllowlist),
+                                               std::end(kRwVpdKeyAllowlist));
 
-  std::set<std::string> allowlist(std::begin(kVpdKeyAllowlist),
-                                  std::end(kVpdKeyAllowlist));
-
-  for (const auto& dict : std::array{ro, rw}) {
+  for (const auto& [dict, allowlist] :
+       std::array{std::pair{ro, ro_allowlist}, std::pair{rw, rw_allowlist}}) {
     for (const auto& [key, value] : dict) {
       if (allowlist.contains(key) && IsValidVpdValue(value)) {
         std::cout << "\"" << key << "\"=\"" << value << "\"\n";
